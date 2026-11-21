@@ -18,6 +18,52 @@ SplitSpace resolves this limitation at the operating system level without modify
 
 ---
 
+## Visual Showcase: Multitasking in Action
+
+SplitSpace seamlessly injects dedicated `+ <AppName>` tasks into the native Windows Taskbar Jump List while preserving existing native tasks and branding. Each click provisions an independent floating workspace window.
+
+### 1. Google Antigravity
+
+| Default Taskbar Menu (Before) | SplitSpace Taskbar Integration (After) |
+| :---: | :---: |
+| <img src="assets/antigravitybeforeinstall.png" width="360" alt="Antigravity Taskbar Menu Before Installation"> | <img src="assets/antigravityafterinstall.png" width="360" alt="Antigravity Taskbar Jump List With + Antigravity"> |
+
+<p align="center">
+  <em>5 concurrent independent Google Antigravity workspaces running simultaneously side-by-side</em>
+  <br><br>
+  <img src="assets/antigravitymultiplewindow.png" width="900" alt="Google Antigravity Multi-Window Execution">
+</p>
+
+---
+
+### 2. OpenAI ChatGPT Desktop
+
+| Default Taskbar Menu (Before) | SplitSpace Taskbar Integration (After) |
+| :---: | :---: |
+| <img src="assets/chatgptbeforeinstall.png" width="360" alt="ChatGPT Taskbar Menu Before Installation"> | <img src="assets/chatgptafterinstall.png" width="360" alt="ChatGPT Taskbar Jump List With + ChatGPT"> |
+
+<p align="center">
+  <em>4 concurrent floating OpenAI ChatGPT desktop workspaces running in parallel</em>
+  <br><br>
+  <img src="assets/chatgptmultiplewindow.png" width="900" alt="OpenAI ChatGPT Desktop Multi-Window Execution">
+</p>
+
+---
+
+### 3. Anthropic Claude Desktop
+
+| Default Taskbar Menu (Before) | SplitSpace Taskbar Integration (After) |
+| :---: | :---: |
+| <img src="assets/claudecodebeforeinstall.png" width="360" alt="Claude Desktop Taskbar Menu Before Installation"> | <img src="assets/claudecodeafterinstall.png" width="360" alt="Claude Desktop Taskbar Jump List With + Claude Preserving Native Tasks"> |
+
+<p align="center">
+  <em>5 concurrent authenticated Anthropic Claude Desktop windows executing parallel conversations</em>
+  <br><br>
+  <img src="assets/claudecodemultiplewindow.png" width="900" alt="Anthropic Claude Desktop Multi-Window Execution">
+</p>
+
+---
+
 ## Core Capabilities
 
 - **Unlimited Multi-Window Scaling**: Intelligently inspects active system processes and provisions dynamic profile slots (`slot-1` through `slot-20`). Every click on `+ <AppName>` continuously opens secondary, tertiary, quaternary, and additional floating windows without any artificial 2-window ceiling.
@@ -146,7 +192,16 @@ SplitSpace/
 ├── docs/
 │   └── architecture.md      # Detailed architectural breakdown
 ├── assets/
-│   └── logo.png             # Project banner identity
+│   ├── logo.png                          # Project banner identity
+│   ├── antigravitybeforeinstall.png      # Antigravity taskbar before installation
+│   ├── antigravityafterinstall.png       # Antigravity Jump List with + Antigravity task
+│   ├── antigravitymultiplewindow.png     # 5 concurrent floating Antigravity instances
+│   ├── chatgptbeforeinstall.png          # ChatGPT taskbar before installation
+│   ├── chatgptafterinstall.png           # ChatGPT Jump List with + ChatGPT task
+│   ├── chatgptmultiplewindow.png         # 4 concurrent floating ChatGPT instances
+│   ├── claudecodebeforeinstall.png       # Claude taskbar before installation
+│   ├── claudecodeafterinstall.png        # Claude Jump List with + Claude task
+│   └── claudecodemultiplewindow.png      # 5 concurrent floating Claude instances
 └── README.md                # Project documentation
 ```
 
