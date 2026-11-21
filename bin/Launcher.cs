@@ -62,7 +62,7 @@ namespace SplitSpace {
             if (appName.Equals("Antigravity", StringComparison.OrdinalIgnoreCase)) {
                 appExe = Path.Combine(localAppData, @"Programs\antigravity\Antigravity.exe");
                 processName = "Antigravity.exe";
-                aumid = "com.google.antigravity";
+                aumid = null; // Standard Win32 app: pinned shortcut has no explicit AUMID. Do not override, to allow natural taskbar stacking.
                 defaultUserData = Path.Combine(appData, "Antigravity");
             } else if (appName.Equals("Claude", StringComparison.OrdinalIgnoreCase)) {
                 string alias1 = Path.Combine(localAppData, @"Microsoft\WindowsApps\Claude_pzs8sxrjxfjjc\claude-desktop.exe");

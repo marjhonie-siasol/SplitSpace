@@ -369,7 +369,19 @@ function Set-SplitSpaceJumpList {
             } catch {}
         }
 
+        # Clear ReadOnly attribute if present before writing
+        if (Test-Path $destFile) {
+            try {
+                Set-ItemProperty -Path $destFile -Name Attributes -Value ([System.IO.FileAttributes]::Normal) -ErrorAction SilentlyContinue
+            } catch {}
+        }
+
         [System.IO.File]::WriteAllBytes($destFile, $finalBytes)
+
+        # Mark as Read-Only to prevent apps like Claude and ChatGPT from wiping SplitSpace tasks on startup
+        try {
+            Set-ItemProperty -Path $destFile -Name Attributes -Value ([System.IO.FileAttributes]::ReadOnly) -ErrorAction SilentlyContinue
+        } catch {}
     }
 
     # Step 6: Create Start Menu shortcut
@@ -431,6 +443,18 @@ function Remove-SplitSpaceJumpList {
     foreach ($h in $targetHashes) {
         $destFile = Join-Path $customDestDir "$h.customDestinations-ms"
         $backupFile = "$destFile.bak"
+
+        # Clear ReadOnly attributes before removing or restoring
+        if (Test-Path $destFile) {
+            try {
+                Set-ItemProperty -Path $destFile -Name Attributes -Value ([System.IO.FileAttributes]::Normal) -ErrorAction SilentlyContinue
+            } catch {}
+        }
+        if (Test-Path $backupFile) {
+            try {
+                Set-ItemProperty -Path $backupFile -Name Attributes -Value ([System.IO.FileAttributes]::Normal) -ErrorAction SilentlyContinue
+            } catch {}
+        }
 
         if (Test-Path $backupFile) {
             $isContaminatedBackup = $false
