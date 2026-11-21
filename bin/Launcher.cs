@@ -188,24 +188,44 @@ namespace SplitSpace {
             Process proc = Process.Start(psi);
 
             // Assign window AppUserModelID to ensure taskbar stacking under pinned icon
-            if (!string.IsNullOrEmpty(aumid) && proc != null) {
-                ThreadPool.QueueUserWorkItem(_ => {
-                    Guid iid = new Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99");
-                    PROPERTYKEY pkeyAumid = new PROPERTYKEY(new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), 5);
+            if (!string.IsNullOrEmpty(aumid)) {
+                Guid iid = new Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99");
+                PROPERTYKEY pkeyAumid = new PROPERTYKEY(new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), 5);
 
-                    for (int i = 0; i < 20; i++) {
-                        Thread.Sleep(250);
-                        try {
-                            var pids = new HashSet<int>();
+                bool assigned = false;
+                for (int i = 0; i < 30; i++) {
+                    Thread.Sleep(200);
+                    try {
+                        var pids = new HashSet<int>();
+                        if (proc != null && !proc.HasExited) {
                             pids.Add(proc.Id);
-                            using (var searcher = new System.Management.ManagementObjectSearcher(
-                                "SELECT ProcessId FROM Win32_Process WHERE ParentProcessId = " + proc.Id)) {
-                                foreach (var obj in searcher.Get()) {
+                        }
+
+                        // Search by processName and command-line containing this slot
+                        using (var searcher = new System.Management.ManagementObjectSearcher(
+                            "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = '" + processName + "'")) {
+                            foreach (var obj in searcher.Get()) {
+                                string cmd = obj["CommandLine"] as string;
+                                if (!string.IsNullOrEmpty(cmd) && cmd.IndexOf("slot-" + selectedSlot, StringComparison.OrdinalIgnoreCase) >= 0) {
                                     pids.Add(Convert.ToInt32(obj["ProcessId"]));
                                 }
                             }
+                        }
 
-                            bool assigned = false;
+                        // Also include child processes of all collected PIDs
+                        var basePids = new List<int>(pids);
+                        foreach (int p in basePids) {
+                            try {
+                                using (var searcher = new System.Management.ManagementObjectSearcher(
+                                    "SELECT ProcessId FROM Win32_Process WHERE ParentProcessId = " + p)) {
+                                    foreach (var obj in searcher.Get()) {
+                                        pids.Add(Convert.ToInt32(obj["ProcessId"]));
+                                    }
+                                }
+                            } catch {}
+                        }
+
+                        if (pids.Count > 0) {
                             EnumWindows((hwnd, lParam) => {
                                 uint pid;
                                 GetWindowThreadProcessId(hwnd, out pid);
@@ -224,11 +244,13 @@ namespace SplitSpace {
                                 }
                                 return true;
                             }, IntPtr.Zero);
+                        }
 
-                            if (assigned) break;
-                        } catch {}
-                    }
-                });
+                        if (assigned) {
+                            break;
+                        }
+                    } catch {}
+                }
             }
         }
     }

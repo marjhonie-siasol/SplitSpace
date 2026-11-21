@@ -53,7 +53,7 @@ function Get-SplitSpaceSupportedApps {
             ProcessName     = "ChatGPT"
             DefaultUserData = "$env:LOCALAPPDATA\Packages\OpenAI.Codex_2p2nqsd0c76g0\LocalCache\Roaming\Codex"
             Aumid           = "OpenAI.Codex_2p2nqsd0c76g0!App"
-            CandidateHashes = @("5f7b5f1e01b83767", "a52b0784bd667468")
+            CandidateHashes = @("3c6e5c18e9f546e6")
             DaemonDir       = ""
             PackageFamily   = "OpenAI.Codex_2p2nqsd0c76g0"
             KnownPaths      = @(
@@ -356,16 +356,27 @@ function Resolve-SingleAppDetails {
     }
 
     # Resolve authentic high-resolution icon
+    $splitSpaceBase = Join-Path $env:LOCALAPPDATA "SplitSpace"
+    $iconsDir = Join-Path $splitSpaceBase "icons"
+    if (-not (Test-Path $iconsDir)) {
+        New-Item -ItemType Directory -Path $iconsDir -Force | Out-Null
+    }
+
     if ($AppDef.AppName -eq "ChatGPT") {
         try {
             $gptPkg = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq "OpenAI.Codex_2p2nqsd0c76g0" } | Select-Object -First 1
             if ($gptPkg -and $gptPkg.InstallLocation) {
                 $darkIco = Join-Path $gptPkg.InstallLocation "app\resources\chatgpt-app-dark.ico"
+                $stagedIco = Join-Path $iconsDir "ChatGPT.ico"
                 if (Test-Path $darkIco) {
-                    $iconPath = $darkIco
+                    Copy-Item -Path $darkIco -Destination $stagedIco -Force -ErrorAction SilentlyContinue
+                    $iconPath = $stagedIco
                 } else {
                     $genIco = Join-Path $gptPkg.InstallLocation "app\resources\icon-chatgpt.ico"
-                    if (Test-Path $genIco) { $iconPath = $genIco }
+                    if (Test-Path $genIco) {
+                        Copy-Item -Path $genIco -Destination $stagedIco -Force -ErrorAction SilentlyContinue
+                        $iconPath = $stagedIco
+                    }
                 }
             }
         } catch {}
@@ -373,9 +384,16 @@ function Resolve-SingleAppDetails {
         try {
             $cPkg = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq "Claude_pzs8sxrjxfjjc" } | Select-Object -First 1
             if ($cPkg -and $cPkg.InstallLocation) {
-                $cExe = Join-Path $cPkg.InstallLocation "app\Claude.exe"
-                if (Test-Path $cExe) {
-                    $iconPath = "$cExe,0"
+                $stagedIco = Join-Path $iconsDir "Claude.ico"
+                $trayIco = Join-Path $cPkg.InstallLocation "app\resources\Tray-Win32.ico"
+                if (Test-Path $trayIco) {
+                    Copy-Item -Path $trayIco -Destination $stagedIco -Force -ErrorAction SilentlyContinue
+                    $iconPath = $stagedIco
+                } else {
+                    $cExe = Join-Path $cPkg.InstallLocation "app\Claude.exe"
+                    if (Test-Path $cExe) {
+                        $iconPath = "$cExe,0"
+                    }
                 }
             }
         } catch {}

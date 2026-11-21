@@ -51,7 +51,7 @@ namespace SplitSpaceShell {
         [DllImport("shell32.dll")]
         public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
 
-        public static int SetShortcutProperties(string lnkPath, string title, string aumid) {
+        public static int SetShortcutTitle(string lnkPath, string title) {
             Guid iid = new Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99");
             IPropertyStore store = null;
             int hr = SHGetPropertyStoreFromParsingName(lnkPath, IntPtr.Zero, 2, ref iid, out store);
@@ -67,30 +67,25 @@ namespace SplitSpaceShell {
                     PROPVARIANT pvTitle = new PROPVARIANT();
                     pvTitle.vt = 31; // VT_LPWSTR
                     pvTitle.pwszVal = Marshal.StringToCoTaskMemUni(title);
-                    store.SetValue(ref pkeyTitle, ref pvTitle);
+                    hr = store.SetValue(ref pkeyTitle, ref pvTitle);
+                    if (hr == 0) {
+                        hr = store.Commit();
+                    }
                     Marshal.FreeCoTaskMem(pvTitle.pwszVal);
                 }
-
-                if (!string.IsNullOrEmpty(aumid)) {
-                    PROPERTYKEY pkeyAumid;
-                    if (PSGetPropertyKeyFromName("System.AppUserModel.ID", out pkeyAumid) != 0) {
-                        // Official System.AppUserModel.ID PKEY GUID: {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}, PID: 5
-                        pkeyAumid = new PROPERTYKEY(new Guid("9f4c2855-9f79-4b39-a8d0-e1d42de1d5f3"), 5);
-                    }
-                    PROPVARIANT pvAumid = new PROPVARIANT();
-                    pvAumid.vt = 31; // VT_LPWSTR
-                    pvAumid.pwszVal = Marshal.StringToCoTaskMemUni(aumid);
-                    store.SetValue(ref pkeyAumid, ref pvAumid);
-                    Marshal.FreeCoTaskMem(pvAumid.pwszVal);
-                }
-
-                hr = store.Commit();
             } finally {
                 if (store != null) {
                     Marshal.ReleaseComObject(store);
                 }
             }
             return hr;
+        }
+
+        public static int SetShortcutProperties(string lnkPath, string title, string aumid) {
+            // Taskbar Jump List task shortcuts in CustomDestinations must only set System.Title.
+            // Assigning System.AppUserModel.ID to the link file itself invalidates the property
+            // store for Windows 11 Shell, so we cleanly delegate to SetShortcutTitle.
+            return SetShortcutTitle(lnkPath, title);
         }
 
         public static void NotifyShell() {
@@ -103,6 +98,102 @@ namespace SplitSpaceShell {
 
 if (-not ([System.Management.Automation.PSTypeName]'SplitSpaceShell.JumpListHelper').Type) {
     Add-Type -TypeDefinition $propertyStoreSource -ErrorAction SilentlyContinue
+}
+
+function Inject-TaskIntoStream {
+    param(
+        [byte[]]$TemplateBytes,
+        [byte[]]$TaskLnkBytes
+    )
+
+    $delim = [byte[]]@(0xAB, 0xFB, 0xBF, 0xBA)
+    $shellLinkGuid = [byte[]]@(0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46)
+
+    # Dynamically locate the Tasks category (Type == 2) across any category sequence
+    $offset = 12
+    $tasksCatOffset = -1
+    $tasksDelimOffset = -1
+
+    while ($offset -lt $TemplateBytes.Length - 8) {
+        $type = [BitConverter]::ToInt32($TemplateBytes, $offset)
+        $items = [BitConverter]::ToInt32($TemplateBytes, $offset + 4)
+
+        $catDelim = -1
+        for ($i = $offset + 8; $i -le $TemplateBytes.Length - 4; $i++) {
+            if ($TemplateBytes[$i] -eq 0xAB -and $TemplateBytes[$i+1] -eq 0xFB -and $TemplateBytes[$i+2] -eq 0xBF -and $TemplateBytes[$i+3] -eq 0xBA) {
+                $catDelim = $i
+                break
+            }
+        }
+
+        if ($type -eq 2) {
+            $tasksCatOffset = $offset
+            $tasksDelimOffset = $catDelim
+            break
+        }
+
+        if ($catDelim -gt 0) {
+            $offset = $catDelim + 4
+        } else {
+            break
+        }
+    }
+
+    if ($tasksCatOffset -ge 12 -and $tasksDelimOffset -gt $tasksCatOffset) {
+        $existingItems = [BitConverter]::ToInt32($TemplateBytes, $tasksCatOffset + 4)
+        if ($existingItems -lt 0) { $existingItems = 0 }
+
+        $ms = New-Object System.IO.MemoryStream
+        $bw = New-Object System.IO.BinaryWriter($ms)
+
+        # 1. Everything before the Tasks category ItemCount
+        $bw.Write($TemplateBytes, 0, $tasksCatOffset + 4)
+
+        # 2. Updated ItemCount (existing + 1)
+        $bw.Write([int32]($existingItems + 1))
+
+        # 3. New Task: GUID + LNK
+        $bw.Write($shellLinkGuid, 0, 16)
+        $bw.Write($TaskLnkBytes, 0, $TaskLnkBytes.Length)
+
+        # 4. Existing tasks in this category
+        $existingTasksStart = $tasksCatOffset + 8
+        $existingTasksLen = $tasksDelimOffset - $existingTasksStart
+        if ($existingTasksLen -gt 0) {
+            $bw.Write($TemplateBytes, $existingTasksStart, $existingTasksLen)
+        }
+
+        # 5. Delimiter
+        $bw.Write($delim, 0, 4)
+
+        # 6. Remainder of template (following categories, terminal footer)
+        $remStart = $tasksDelimOffset + 4
+        if ($remStart -lt $TemplateBytes.Length) {
+            $bw.Write($TemplateBytes, $remStart, ($TemplateBytes.Length - $remStart))
+        }
+
+        $res = $ms.ToArray()
+        $bw.Close()
+        $ms.Close()
+        return $res
+    }
+
+    # Fallback: Clean single-category stream
+    $ms = New-Object System.IO.MemoryStream
+    $bw = New-Object System.IO.BinaryWriter($ms)
+    $bw.Write([int32]2) # Ver
+    $bw.Write([int32]1) # CatCount
+    $bw.Write([int32]0) # Res
+    $bw.Write([int32]2) # CatType = Tasks
+    $bw.Write([int32]1) # ItemCount = 1
+    $bw.Write($shellLinkGuid, 0, 16)
+    $bw.Write($TaskLnkBytes, 0, $TaskLnkBytes.Length)
+    $bw.Write($delim, 0, 4)
+    $bw.Write([byte[]]@(0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00))
+    $res = $ms.ToArray()
+    $bw.Close()
+    $ms.Close()
+    return $res
 }
 
 function Set-SplitSpaceJumpList {
@@ -176,7 +267,7 @@ function Set-SplitSpaceJumpList {
             try {
                 $candidateBytes = [System.IO.File]::ReadAllBytes($bakCandidate)
                 $txt = [System.Text.Encoding]::Unicode.GetString($candidateBytes)
-                if ($candidateBytes.Length -gt 1000 -and ($txt -notmatch "splitspace")) {
+                if ($candidateBytes.Length -gt 1000 -and ($txt -notmatch "splitspace\.exe")) {
                     $templateBytes = $candidateBytes
                     break
                 }
@@ -187,7 +278,7 @@ function Set-SplitSpaceJumpList {
             try {
                 $candidateBytes = [System.IO.File]::ReadAllBytes($destCandidate)
                 $txt = [System.Text.Encoding]::Unicode.GetString($candidateBytes)
-                if ($candidateBytes.Length -gt 1000 -and ($txt -notmatch "splitspace")) {
+                if ($candidateBytes.Length -gt 1000 -and ($txt -notmatch "splitspace\.exe")) {
                     $templateBytes = $candidateBytes
                     break
                 }
@@ -215,7 +306,13 @@ function Set-SplitSpaceJumpList {
         $sc.WorkingDirectory = $workingDir
     }
     $sc.Description = "Launch an independent $($TargetApp.DisplayName) workspace window"
-    $sc.IconLocation = $iconPathToUse
+    if ($iconPathToUse -match "\.ico$" -and -not $iconPathToUse.EndsWith(",0")) {
+        $sc.IconLocation = $iconPathToUse
+    } elseif ($iconPathToUse -notmatch ",\d+$" -and -not $iconPathToUse.EndsWith(".ico")) {
+        $sc.IconLocation = "$iconPathToUse,0"
+    } else {
+        $sc.IconLocation = $iconPathToUse
+    }
     $sc.Save()
 
     [System.Runtime.InteropServices.Marshal]::ReleaseComObject($sc) | Out-Null
@@ -223,7 +320,7 @@ function Set-SplitSpaceJumpList {
     [System.GC]::Collect()
 
     try {
-        [SplitSpaceShell.JumpListHelper]::SetShortcutProperties($tempLnkPath, $TaskLabel, $TargetApp.AppUserModelId) | Out-Null
+        [SplitSpaceShell.JumpListHelper]::SetShortcutTitle($tempLnkPath, $TaskLabel) | Out-Null
     } catch {}
 
     [System.GC]::Collect()
@@ -243,81 +340,12 @@ function Set-SplitSpaceJumpList {
         return $false
     }
 
-    $delim = [byte[]]@(0xAB, 0xFB, 0xBF, 0xBA)
-    $shellLinkGuid = [byte[]]@(0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46)
+    # Assemble destination stream using universal category-aware injector
     $finalBytes = $null
-
-    # Strategy A: Multi-task injection into authentic template (preserving existing tasks like Claude New Chat/Session and Antigravity Recent)
     if ($templateBytes -and $templateBytes.Length -gt 24) {
-        $d1 = -1
-        for ($i = 20; $i -le $templateBytes.Length - 4; $i++) {
-            if ($templateBytes[$i] -eq 0xAB -and $templateBytes[$i+1] -eq 0xFB -and $templateBytes[$i+2] -eq 0xBF -and $templateBytes[$i+3] -eq 0xBA) {
-                $d1 = $i
-                break
-            }
-        }
-
-        if ($d1 -ge 20) {
-            $catType = [BitConverter]::ToInt32($templateBytes, 12)
-            $existingItemCount = [BitConverter]::ToInt32($templateBytes, 16)
-
-            $ms = New-Object System.IO.MemoryStream
-            $bw = New-Object System.IO.BinaryWriter($ms)
-
-            # Write File Header (0..11)
-            $bw.Write($templateBytes, 0, 12)
-
-            # Write Category 1 Header: CatType + (existingItemCount + 1)
-            $bw.Write([int32]$catType)
-            $bw.Write([int32]($existingItemCount + 1))
-
-            # Write New Task as Item 1 at the top of the tasks list: GUID + LNK bytes
-            $bw.Write($shellLinkGuid, 0, 16)
-            $bw.Write($taskLnkBytes, 0, $taskLnkBytes.Length)
-
-            # Preserve all existing tasks from offset 20 up to delimiter $d1
-            if ($d1 -gt 20) {
-                $bw.Write($templateBytes, 20, ($d1 - 20))
-            }
-
-            # Write delimiter
-            $bw.Write($delim, 0, 4)
-
-            # Preserve remainder of template (Category 2 Recent Folders, terminal record)
-            $remStart = $d1 + 4
-            if ($remStart -lt $templateBytes.Length) {
-                $bw.Write($templateBytes, $remStart, ($templateBytes.Length - $remStart))
-            }
-
-            $finalBytes = $ms.ToArray()
-            $bw.Close()
-            $ms.Close()
-        }
-    }
-
-    # Strategy B: Clean single-category stream assembly (if no template available)
-    if (-not $finalBytes) {
-        $ms = New-Object System.IO.MemoryStream
-        $bw = New-Object System.IO.BinaryWriter($ms)
-
-        # Header: Version=2, CategoryCount=1, Reserved=0
-        $bw.Write([int32]2)
-        $bw.Write([int32]1)
-        $bw.Write([int32]0)
-
-        # Category 1: Tasks (Category Type = 2, Item Count = 1)
-        $bw.Write([int32]2)
-        $bw.Write([int32]1)
-        $bw.Write($shellLinkGuid, 0, 16)
-        $bw.Write($taskLnkBytes, 0, $taskLnkBytes.Length)
-        $bw.Write($delim, 0, 4)
-
-        # Terminal record: 12 bytes
-        $bw.Write([byte[]]@(0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00))
-
-        $finalBytes = $ms.ToArray()
-        $bw.Close()
-        $ms.Close()
+        $finalBytes = Inject-TaskIntoStream -TemplateBytes $templateBytes -TaskLnkBytes $taskLnkBytes
+    } else {
+        $finalBytes = Inject-TaskIntoStream -TemplateBytes (New-Object byte[] 0) -TaskLnkBytes $taskLnkBytes
     }
 
     if (-not $finalBytes) {
@@ -335,7 +363,7 @@ function Set-SplitSpaceJumpList {
             try {
                 $existing = [System.IO.File]::ReadAllBytes($destFile)
                 $existingTxt = [System.Text.Encoding]::Unicode.GetString($existing)
-                if ($existing.Length -gt 1000 -and ($existingTxt -notmatch "splitspace")) {
+                if ($existing.Length -gt 1000 -and ($existingTxt -notmatch "splitspace\.exe")) {
                     Copy-Item -Path $destFile -Destination $backupFile -Force
                 }
             } catch {}
@@ -409,7 +437,7 @@ function Remove-SplitSpaceJumpList {
             try {
                 $bakBytes = [System.IO.File]::ReadAllBytes($backupFile)
                 $bakTxt = [System.Text.Encoding]::Unicode.GetString($bakBytes)
-                if ($bakTxt -match "splitspace") {
+                if ($bakTxt -match "splitspace\.exe") {
                     $isContaminatedBackup = $true
                 }
             } catch {}
