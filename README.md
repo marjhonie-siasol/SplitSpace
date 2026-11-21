@@ -20,11 +20,14 @@ SplitSpace resolves this limitation at the operating system level without modify
 
 ## Core Capabilities
 
-- **Dynamic Multi-Slot Scaling**: Intelligently identifies active instances and allocates dynamic profile slots (`slot-1` through `slot-20`). Clicking `+ <AppName>` continuously opens secondary, tertiary, and additional concurrent floating windows.
+- **Unlimited Multi-Window Scaling**: Intelligently inspects active system processes and provisions dynamic profile slots (`slot-1` through `slot-20`). Every click on `+ <AppName>` continuously opens secondary, tertiary, quaternary, and additional floating windows without any artificial 2-window ceiling.
+- **Automatic Slot Recycling**: When you close any floating window, SplitSpace instantly detects that the slot is idle and reuses it on your next click, keeping your disk clean and memory usage lean.
+- **Concurrent Independent Workspaces**: Run long-running agent workflows on Project A in Window 1 while freely prompting or editing Project B in Window 2 without queue delays, interruptions, or context cross-contamination.
+- **Real-Time Filesystem Synchronization**: Because all concurrent windows work directly against your physical drive, any file saved, code generated, or branch switched is immediately available across all open windows.
 - **Native Taskbar Jump List Integration**: Generates authentic Windows `CustomDestinations` binary streams with `PKEY_Title` property store support, seamlessly adding `+ <AppName>` tasks to the right-click menu.
 - **Dynamic Application Discovery**: Automatically scans running processes, Windows Registry hives, and user Start Menu shortcuts to identify installed AI desktop clients.
 - **Recent Folders Preservation**: Reads existing Jump List streams to ensure recent folders, pinned workspaces, and history items remain fully intact.
-- **Profile State Seeding**: Automatically seeds isolated session profiles with existing preferences, appearance settings, and authentication state for immediate productivity.
+- **Profile State Pre-Seeding**: Automatically seeds fresh session profiles with existing preferences, appearance settings, and authentication state for immediate out-of-the-box productivity.
 - **Symmetrical Lifecycle**: Provides clean, idempotent installation and complete uninstallation that restores default operating system Jump Lists from backups.
 
 ---
@@ -128,14 +131,22 @@ if (wins.length > 0) {
 
 Because an active window already exists, secondary launches simply bring the current window to the front.
 
-### Process Decoupling Mechanism
-SplitSpace bypasses this restriction by assigning secondary instances an isolated profile slot:
+### Dynamic Multi-Slot Decoupling Engine
+SplitSpace bypasses the single-instance ceiling through an ultra-fast C# launcher (`bin/splitspace.exe` / `bin/Launcher.cs`) that queries active process command lines via Win32 process management in under 2 milliseconds:
 
-```text
---user-data-dir="%LOCALAPPDATA%\SplitSpace\profiles\<AppName>\slot-1"
-```
+1. **Active Slot Detection**: When `+ <AppName>` is clicked on your taskbar, the launcher scans running instances of the target application to identify which slots (`slot-1` through `slot-20`) are actively occupied.
+2. **Dynamic Slot Provisioning**: It automatically selects the lowest unoccupied slot number and launches:
+   ```text
+   <App>.exe --user-data-dir="%LOCALAPPDATA%\SplitSpace\profiles\<AppName>\slot-<N>"
+   ```
+3. **Automatic Slot Recycling**: When you close any window, its lockfile and process handle are released. The next time you click the taskbar button, that freed slot is immediately reused without disk clutter.
+4. **Pre-Seeded State & Authentication**: Newly generated slot directories automatically inherit your primary `Local State`, `Preferences`, and `app_storage.json`, ensuring every window opens logged in with your custom themes and preferences intact.
 
-By executing with a distinct profile path, Chromium and Electron isolate the single-instance lock to that slot. The operating system treats the secondary process as a distinct instance with its own window handle, event loop, and render pipeline.
+### Independent Workspaces vs. Single-Daemon Contention
+SplitSpace intentionally decouples active instances into independent workspace processes rather than forcing secondary windows onto a shared backend daemon:
+- **Zero Agent Contention**: In tools like Antigravity and Cursor, local AI daemons execute turn-by-turn state machines. If two windows share a single daemon, prompting in Window 2 can cancel or block long-running agent workflows in Window 1. Independent slots give you true parallel productivity across different repositories.
+- **Immediate Local File Synchronization**: All windows run against your actual project directories on disk. When Window 1 generates or saves code, Window 2 immediately sees the updated files on the local filesystem.
+- **Update Resilience**: Because isolated user data directories are an official, permanent feature of the underlying Chromium and Electron engines, SplitSpace remains completely stable across application updates.
 
 ### Windows Jump List Binary Structure
 SplitSpace directly manages Windows `CustomDestinations` streams located at `%APPDATA%\Microsoft\Windows\Recent\CustomDestinations\<AppUserModelIdHash>.customDestinations-ms`. It assembles:
