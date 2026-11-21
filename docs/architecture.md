@@ -1,12 +1,12 @@
 # SplitSpace Technical Architecture
 
-This document outlines the system architecture, Windows process management, and session isolation mechanics implemented by SplitSpace.
+This document outlines the system architecture, Windows process management, taskbar grouping mechanics, and session isolation implemented by SplitSpace.
 
 ---
 
 ## 1. The Single-Instance Mechanism in Electron & Chromium
 
-Desktop applications like Antigravity, Claude Desktop, and ChatGPT Desktop use Electron's `app.requestSingleInstanceLock()` API:
+Desktop applications like Google Antigravity, Anthropic Claude Desktop, and OpenAI ChatGPT Desktop use Electron's or Chromium's single-instance lock APIs (`app.requestSingleInstanceLock()`):
 
 ```javascript
 // Typical Electron single-instance enforcement
@@ -27,7 +27,7 @@ if (!gotTheLock) {
 1. When the first instance launches, it binds to a Windows named pipe or local socket derived from its `userData` directory hash:
    `\\.\pipe\<user-data-hash>-lock`
 2. It creates a filesystem lockfile at:
-   `%APPDATA%\<AppName>\SingletonLock`
+   `%APPDATA%\<AppName>\SingletonLock` (or within package local cache)
 3. When a second process starts, it queries the named pipe.
 4. If the pipe is active, it forwards its command-line arguments to the primary instance and terminates immediately.
 5. If the application does not have multi-window handlers implemented in its `second-instance` listener, the primary instance simply focuses the existing window.
@@ -59,74 +59,64 @@ Because each user data directory path is unique, Chromium generates a distinct n
 
 ### Dynamic Slot Allocation Algorithm
 When the taskbar item is clicked, `splitspace.exe` executes:
-1. Queries active process command lines via Win32 process APIs to identify currently occupied slots (`slot-1` through `slot-20`).
-2. Identifies the lowest available slot number (reusing slots when earlier windows are closed).
+1. Queries active process command lines via Win32 process APIs (`Win32_Process`) to identify currently occupied slots (`slot-1` through `slot-20`).
+2. Identifies the lowest available slot number (reusing slots automatically when earlier windows are closed).
 3. Verifies slot hydration; copies configuration and session files if the directory is newly initialized.
 4. Spawns the target application with `--user-data-dir="%LOCALAPPDATA%\SplitSpace\profiles\<AppName>\slot-<N>"`.
 
 ---
 
-## 3. Credential & State Synchronization
+## 3. Windows Taskbar Grouping & AppUserModelID (AUMID)
 
-To ensure that opening a new window does not force the user to re-authenticate or log in again, SplitSpace uses a profile hydration strategy:
+Windows 11 groups running application windows under taskbar icons according to their **Application User Model ID** (`AppUserModelID`).
 
-1. When a secondary profile is created under `%LOCALAPPDATA%\SplitSpace\profiles\<AppName>\slot-N`:
-2. The launcher synchronizes essential configuration and local store files from the primary profile:
-   - `Local State` (Application preferences and encryption keys)
-   - `Preferences` (Interface themes, window configurations)
-   - `app_storage.json` (Conversation stores and account identifiers)
-3. Volatile locks and process-specific temporary files are excluded:
-   - `lockfile` / `SingletonLock`
-   - `SingletonCookie`
-   - `SingletonSocket`
-   - `Crashpad\`
-4. The secondary window launches immediately authenticated, ready for independent work.
+### The MSIX Package Identity Challenge
+Modern AI clients such as Anthropic Claude Desktop and OpenAI ChatGPT Desktop are distributed as MSIX / Windows Store packages:
+- Claude Desktop AUMID: `Claude_pzs8sxrjxfjjc!Claude`
+- OpenAI ChatGPT Desktop AUMID: `OpenAI.Codex_2p2nqsd0c76g0!App`
 
----
+When an executable within `C:\Program Files\WindowsApps` is launched via raw Win32 process execution without package activation:
+1. The operating system treats it as an unpackaged, generic Win32 executable.
+2. It assigns an implicit file-path AUMID rather than the package AUMID.
+3. Windows 11 pushes the running application to the far right of the taskbar as an ungrouped icon, rather than stacking under the pinned Store shortcut.
+4. The window extracts the embedded PE binary icon rather than the official high-resolution vector Store asset.
 
-## 4. Windows Jump List Integration
+### SplitSpace Unified Grouping Engine
+SplitSpace ensures secondary windows stack directly into their pinned taskbar buttons with authentic logos through a three-tier synchronization:
+1. **Package Execution Alias Routing**: Launches are dispatched through the official AppExecutionAlias (`%LOCALAPPDATA%\Microsoft\WindowsApps\<PackageFamily>\<AppAlias>.exe`), activating the authentic package container identity.
+2. **Explicit Window Property Binding**: On process spawn, `splitspace.exe` queries top-level window handles (`HWND`) and invokes `SHGetPropertyStoreForWindow` to explicitly bind `System.AppUserModel.ID` (`PKEY_AppUserModel_ID: {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}, 5`).
+3. **PropertyStore Shortcut Binding**: Sets `System.AppUserModel.ID` and `System.Title` directly on the task shortcut stream.
 
-Windows Taskbar Jump Lists are managed by the Windows Shell API. Custom actions appear in the **Tasks** category of the right-click menu:
-
-```text
-+------------------------------------+
-| Recent Folders                     |
-|   cityamor-v2                      |
-|   data_collection                  |
-|   smart-ledger-demo                |
-+------------------------------------+
-| Recent                             |
-|   Recent Files & Documents         |
-+------------------------------------+
-| Tasks                              |
-|   + Antigravity                    | <-- Injected by SplitSpace
-|   Antigravity                      |
-|   Unpin from taskbar               |
-|   Close window                     |
-+------------------------------------+
-```
-
-### Registration Flow
-1. `lib/jumplist.ps1` extracts existing authentic Jump List streams (`*.customDestinations-ms.bak`).
-2. Generates an authentic Windows ShellLink (`.lnk`) targeting `splitspace.exe` with `PKEY_Title` set to `+ <AppName>`.
-3. Assembles the binary stream, preserving all Category 2 recent folders and terminal records.
-4. Notifies Windows Explorer via `SHChangeNotify(SHCNE_ASSOCCHANGED)` to reload the taskbar menu cache immediately.
+Result: Secondary and tertiary windows stack into the pinned taskbar icon with dual preview thumbnails, matching the gold-standard behavior demonstrated by Google Antigravity.
 
 ---
 
-## 5. Discovery Fallback Matrix
+## 4. Multi-Task Jump List Binary Architecture
 
-When `lib/discover.ps1` runs, it traverses the system in order of fastest resolution:
+Windows Taskbar Jump Lists are stored as binary `CustomDestinations` streams in:
+`%APPDATA%\Microsoft\Windows\Recent\CustomDestinations\<AumidHash>.customDestinations-ms`
 
-| Priority | Target Source | Detection Mechanism |
-| :--- | :--- | :--- |
-| 1 | Active Process | `Get-Process Antigravity -ErrorAction SilentlyContinue` |
-| 2 | Current User AppData | `Test-Path "$env:LOCALAPPDATA\Programs\antigravity\Antigravity.exe"` |
-| 3 | Windows User Registry | `HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*` |
-| 4 | Windows Machine Registry | `HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*` |
-| 5 | Start Menu Shortcuts | `$env:APPDATA\Microsoft\Windows\Start Menu\Programs\*.lnk` |
+### Multi-Task Preservation in Category 1
+Applications like Claude Desktop define native Jump List tasks (`New Chat` and `New Code Session`). Naive replacement of Category 1 destroys these actions.
 
-If all priority checks fail, the installer exits cleanly with an actionable error message rather than creating broken shortcuts.
+SplitSpace implements non-destructive binary stream assembly:
+1. Reads existing Category 1 header (Type = 2) and records `ItemCount = N`.
+2. Increments `ItemCount` to `N + 1`.
+3. Injects the new SplitSpace ShellLink GUID (`{00021401-0000-0000-C000-000000000046}`) and task LNK bytes as Item 1 at the top of the tasks list.
+4. Preserves all subsequent native tasks (`New Chat`, `New Code Session`) verbatim.
+5. Preserves Category 2 Recent Folders and terminal records.
+6. Emits `SHChangeNotify(SHCNE_ASSOCCHANGED)` to update the taskbar context menu instantly.
+
+---
+
+## 5. Why Cursor is Excluded from SplitSpace
+
+Cursor is an advanced fork of Visual Studio Code. SplitSpace intentionally excludes Cursor for the following architectural reasons:
+1. **Native Multi-Window Support**: Cursor already supports concurrent workspaces natively out of the box via `Ctrl+Shift+N` (File > New Window).
+2. **Session Database Isolation**: Cursor maintains authentication tokens in an encrypted SQLite database (`state.vscdb`). Passing `--user-data-dir` forces a clean profile that disconnects existing credentials and prompts for re-login.
+3. **Jump List Mutex Contention**: Cursor's internal C++ workbench constantly overwrites `CustomDestinations` on workspace focus changes, conflicting with external Jump List management.
+
+For Cursor users, the built-in `Ctrl+Shift+N` shortcut remains the optimal multi-window solution.
 
 ---
 
@@ -137,23 +127,26 @@ sequenceDiagram
     participant User
     participant Installer as install.ps1
     participant System as Windows Shell
-    participant Launcher as splitspace.cmd
+    participant Launcher as splitspace.exe
     participant Uninstaller as uninstall.ps1
 
     Note over User, Installer: Installation Flow
-    User->>Installer: Runs irm .../install.ps1 | iex
-    Installer->>System: Discovers app path & shortcut
-    Installer->>System: Injects '+ SplitSpace' Jump List task
-    Installer-->>User: [SUCCESS] Multi-window enabled
+    User->>Installer: Runs .\install.ps1
+    Installer->>System: Discovers applications (Win32 & MSIX aliases)
+    Installer->>System: Injects '+ <AppName>' while preserving native tasks
+    Installer-->>User: [SUCCESS] Multi-window enabled for detected apps
 
     Note over User, Launcher: Everyday Multitasking
-    User->>System: Right-click taskbar -> Click '+ SplitSpace'
-    System->>Launcher: Executes splitspace.cmd
-    Launcher->>System: Spawns independent Antigravity window
+    User->>System: Right-click taskbar -> Click '+ <AppName>'
+    System->>Launcher: Executes splitspace.exe <AppName>
+    Launcher->>Launcher: Resolves lowest available slot (slot-1..20)
+    Launcher->>Launcher: Seeds user preferences from authentic profile
+    Launcher->>System: Spawns target with --user-data-dir
+    Launcher->>System: Sets Window AppUserModelID for unified stacking
 
     Note over User, Uninstaller: Removal Flow
-    User->>Uninstaller: Runs irm .../uninstall.ps1 | iex
-    Uninstaller->>System: Removes Jump List task & restores shortcut
-    Uninstaller->>System: Cleans up SplitSpace profile folders
+    User->>Uninstaller: Runs .\uninstall.ps1
+    Uninstaller->>System: Restores original Jump List backups (restoring native tasks)
+    Uninstaller->>System: Cleans up SplitSpace profile caches
     Uninstaller-->>User: [SUCCESS] System restored to default
 ```

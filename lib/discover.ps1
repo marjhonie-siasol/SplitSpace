@@ -2,9 +2,12 @@
 .SYNOPSIS
     SplitSpace Application Discovery Engine
 .DESCRIPTION
-    Dynamically scans running processes, pinned taskbar shortcuts, start menu entries,
-    standard directories, and the Windows Registry to discover installed AI desktop applications
-    (such as Google Antigravity, Claude Desktop, ChatGPT Desktop, Cursor, Windsurf, Perplexity, LM Studio, Chatbox).
+    Dynamically scans running processes, WindowsApp Execution Aliases, Appx packages,
+    pinned taskbar shortcuts, start menu entries, standard directories, and the Windows Registry
+    to discover installed AI desktop applications (such as Google Antigravity, Anthropic Claude Desktop,
+    OpenAI ChatGPT Desktop, Windsurf, Perplexity, LM Studio, Chatbox).
+    Note: Cursor is intentionally excluded because it provides native multi-window support via Ctrl+Shift+N
+    and uses an internal SQLite state database that invalidates sessions under isolated user-data-dir switches.
 #>
 
 function Get-SplitSpaceSupportedApps {
@@ -18,8 +21,9 @@ function Get-SplitSpaceSupportedApps {
             ProcessName     = "Antigravity"
             DefaultUserData = "$env:APPDATA\Antigravity"
             Aumid           = "com.google.antigravity"
-            CandidateHashes = @("58aa7a7fc099eefc", "5f7b5f1e01b83767", "1af8d2aae9c8f3b3")
+            CandidateHashes = @("7ac06f21f51c55e5", "58aa7a7fc099eefc", "5f7b5f1e01b83767", "1af8d2aae9c8f3b3")
             DaemonDir       = "$env:USERPROFILE\.gemini\antigravity\daemon"
+            PackageFamily   = ""
             KnownPaths      = @(
                 "$env:LOCALAPPDATA\Programs\antigravity\Antigravity.exe",
                 "$env:ProgramFiles\Antigravity\Antigravity.exe",
@@ -30,43 +34,33 @@ function Get-SplitSpaceSupportedApps {
             AppName         = "Claude"
             DisplayName     = "Anthropic Claude Desktop"
             ProcessName     = "Claude"
-            DefaultUserData = "$env:APPDATA\Claude"
-            Aumid           = "Anthropic.Claude"
-            CandidateHashes = @()
+            DefaultUserData = "$env:LOCALAPPDATA\Claude-Data\claude_pzs8sxrjxfjjc"
+            Aumid           = "Claude_pzs8sxrjxfjjc!Claude"
+            CandidateHashes = @("5b74df9d69366704")
             DaemonDir       = ""
+            PackageFamily   = "Claude_pzs8sxrjxfjjc"
             KnownPaths      = @(
+                "$env:LOCALAPPDATA\Microsoft\WindowsApps\Claude_pzs8sxrjxfjjc\claude-desktop.exe",
+                "$env:LOCALAPPDATA\Microsoft\WindowsApps\claude-desktop.exe",
                 "$env:LOCALAPPDATA\Programs\Claude\Claude.exe",
                 "$env:LOCALAPPDATA\AnthropicClaude\Claude.exe",
-                "$env:ProgramFiles\Claude\Claude.exe",
-                "$env:ProgramFiles(x86)\Claude\Claude.exe"
+                "$env:ProgramFiles\Claude\Claude.exe"
             )
         }
         "ChatGPT" = @{
             AppName         = "ChatGPT"
             DisplayName     = "OpenAI ChatGPT Desktop"
             ProcessName     = "ChatGPT"
-            DefaultUserData = "$env:APPDATA\ChatGPT"
-            Aumid           = "OpenAI.ChatGPT"
-            CandidateHashes = @()
+            DefaultUserData = "$env:LOCALAPPDATA\Packages\OpenAI.Codex_2p2nqsd0c76g0\LocalCache\Roaming\Codex"
+            Aumid           = "OpenAI.Codex_2p2nqsd0c76g0!App"
+            CandidateHashes = @("5f7b5f1e01b83767", "a52b0784bd667468")
             DaemonDir       = ""
+            PackageFamily   = "OpenAI.Codex_2p2nqsd0c76g0"
             KnownPaths      = @(
+                "$env:LOCALAPPDATA\Microsoft\WindowsApps\OpenAI.Codex_2p2nqsd0c76g0\chatgpt-desktop.exe",
+                "$env:LOCALAPPDATA\Microsoft\WindowsApps\chatgpt-desktop.exe",
                 "$env:LOCALAPPDATA\Programs\ChatGPT\ChatGPT.exe",
-                "$env:ProgramFiles\ChatGPT\ChatGPT.exe",
-                "$env:ProgramFiles(x86)\ChatGPT\ChatGPT.exe"
-            )
-        }
-        "Cursor" = @{
-            AppName         = "Cursor"
-            DisplayName     = "Cursor"
-            ProcessName     = "Cursor"
-            DefaultUserData = "$env:APPDATA\Cursor"
-            Aumid           = "Cursor"
-            CandidateHashes = @("8346f26264213ffa")
-            DaemonDir       = ""
-            KnownPaths      = @(
-                "$env:LOCALAPPDATA\Programs\cursor\Cursor.exe",
-                "$env:ProgramFiles\Cursor\Cursor.exe",
-                "$env:ProgramFiles(x86)\Cursor\Cursor.exe"
+                "$env:ProgramFiles\ChatGPT\ChatGPT.exe"
             )
         }
         "Windsurf" = @{
@@ -77,6 +71,7 @@ function Get-SplitSpaceSupportedApps {
             Aumid           = "Windsurf"
             CandidateHashes = @()
             DaemonDir       = ""
+            PackageFamily   = ""
             KnownPaths      = @(
                 "$env:LOCALAPPDATA\Programs\windsurf\Windsurf.exe",
                 "$env:ProgramFiles\Windsurf\Windsurf.exe",
@@ -91,6 +86,7 @@ function Get-SplitSpaceSupportedApps {
             Aumid           = "Perplexity"
             CandidateHashes = @()
             DaemonDir       = ""
+            PackageFamily   = ""
             KnownPaths      = @(
                 "$env:LOCALAPPDATA\Programs\Perplexity\Perplexity.exe",
                 "$env:ProgramFiles\Perplexity\Perplexity.exe",
@@ -105,6 +101,7 @@ function Get-SplitSpaceSupportedApps {
             Aumid           = "elementlabs.lmstudio"
             CandidateHashes = @()
             DaemonDir       = ""
+            PackageFamily   = ""
             KnownPaths      = @(
                 "$env:LOCALAPPDATA\Programs\LM Studio\LM Studio.exe",
                 "$env:ProgramFiles\LM Studio\LM Studio.exe",
@@ -119,6 +116,7 @@ function Get-SplitSpaceSupportedApps {
             Aumid           = "xyz.chatboxapp.app"
             CandidateHashes = @()
             DaemonDir       = ""
+            PackageFamily   = ""
             KnownPaths      = @(
                 "$env:LOCALAPPDATA\Programs\chatbox\Chatbox.exe",
                 "$env:ProgramFiles\Chatbox\Chatbox.exe",
@@ -195,7 +193,6 @@ function Get-SplitSpaceTargetApp {
 
     # If specific app requested
     if ($AppName -and $AppName -ne "auto" -and $AppName -ne "all") {
-        # Search by key or DisplayName
         $matchedKey = $null
         foreach ($k in $supported.Keys) {
             if ($k.Equals($AppName, [System.StringComparison]::OrdinalIgnoreCase) -or
@@ -233,18 +230,49 @@ function Resolve-SingleAppDetails {
     )
 
     $foundExe = $null
+    $aliasExe = $null
+    $iconPath = $null
     $discoverySource = ""
 
-    # Strategy 1: Check running process
-    try {
-        $runningProc = Get-CimInstance Win32_Process -Filter "Name = '$($AppDef.ProcessName).exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($runningProc -and $runningProc.ExecutablePath -and (Test-Path $runningProc.ExecutablePath)) {
-            $foundExe = $runningProc.ExecutablePath
-            $discoverySource = "Running Process (PID $($runningProc.ProcessId))"
+    # Strategy 1: Check AppExecutionAlias in WindowsApps
+    foreach ($kp in $AppDef.KnownPaths) {
+        if ($kp -match "WindowsApps" -and (Test-Path $kp)) {
+            $aliasExe = (Resolve-Path $kp).Path
+            $foundExe = $aliasExe
+            $discoverySource = "WindowsApp Execution Alias"
+            break
         }
-    } catch {}
+    }
 
-    # Strategy 2: Check pinned taskbar shortcut
+    # Strategy 2: Check AppX package installation
+    if (-not $foundExe -and $AppDef.PackageFamily) {
+        try {
+            $pkg = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq $AppDef.PackageFamily -or $_.Name -like "*$($AppDef.AppName)*" } | Select-Object -First 1
+            if ($pkg -and $pkg.InstallLocation -and (Test-Path $pkg.InstallLocation)) {
+                $candidate = Join-Path $pkg.InstallLocation "app\$($AppDef.ProcessName).exe"
+                if (-not (Test-Path $candidate)) {
+                    $candidate = Join-Path $pkg.InstallLocation "$($AppDef.ProcessName).exe"
+                }
+                if (Test-Path $candidate) {
+                    $foundExe = $candidate
+                    $discoverySource = "Windows Store Package ($($pkg.Name))"
+                }
+            }
+        } catch {}
+    }
+
+    # Strategy 3: Check running process
+    if (-not $foundExe) {
+        try {
+            $runningProc = Get-CimInstance Win32_Process -Filter "Name = '$($AppDef.ProcessName).exe'" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($runningProc -and $runningProc.ExecutablePath -and (Test-Path $runningProc.ExecutablePath)) {
+                $foundExe = $runningProc.ExecutablePath
+                $discoverySource = "Running Process (PID $($runningProc.ProcessId))"
+            }
+        } catch {}
+    }
+
+    # Strategy 4: Check pinned taskbar shortcut
     if (-not $foundExe) {
         $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
         if (Test-Path $taskbarPath) {
@@ -263,7 +291,7 @@ function Resolve-SingleAppDetails {
         }
     }
 
-    # Strategy 3: Check known installation paths
+    # Strategy 5: Check known installation paths
     if (-not $foundExe) {
         foreach ($kp in $AppDef.KnownPaths) {
             if (Test-Path $kp) {
@@ -274,7 +302,7 @@ function Resolve-SingleAppDetails {
         }
     }
 
-    # Strategy 4: Check Start Menu shortcuts
+    # Strategy 6: Check Start Menu shortcuts
     if (-not $foundExe) {
         $startMenuFolders = @(
             "$env:APPDATA\Microsoft\Windows\Start Menu\Programs",
@@ -298,7 +326,7 @@ function Resolve-SingleAppDetails {
         }
     }
 
-    # Strategy 5: Check Windows Registry Uninstall entries
+    # Strategy 7: Check Windows Registry Uninstall entries
     if (-not $foundExe) {
         $regKeys = @(
             "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -325,6 +353,36 @@ function Resolve-SingleAppDetails {
 
     if (-not $foundExe) {
         return $null
+    }
+
+    # Resolve authentic high-resolution icon
+    if ($AppDef.AppName -eq "ChatGPT") {
+        try {
+            $gptPkg = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq "OpenAI.Codex_2p2nqsd0c76g0" } | Select-Object -First 1
+            if ($gptPkg -and $gptPkg.InstallLocation) {
+                $darkIco = Join-Path $gptPkg.InstallLocation "app\resources\chatgpt-app-dark.ico"
+                if (Test-Path $darkIco) {
+                    $iconPath = $darkIco
+                } else {
+                    $genIco = Join-Path $gptPkg.InstallLocation "app\resources\icon-chatgpt.ico"
+                    if (Test-Path $genIco) { $iconPath = $genIco }
+                }
+            }
+        } catch {}
+    } elseif ($AppDef.AppName -eq "Claude") {
+        try {
+            $cPkg = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq "Claude_pzs8sxrjxfjjc" } | Select-Object -First 1
+            if ($cPkg -and $cPkg.InstallLocation) {
+                $cExe = Join-Path $cPkg.InstallLocation "app\Claude.exe"
+                if (Test-Path $cExe) {
+                    $iconPath = "$cExe,0"
+                }
+            }
+        } catch {}
+    }
+
+    if (-not $iconPath) {
+        $iconPath = "$foundExe,0"
     }
 
     # Resolve all CustomDestinations AUMID hashes dynamically
@@ -355,6 +413,8 @@ function Resolve-SingleAppDetails {
         DisplayName      = $AppDef.DisplayName
         ProcessName      = $AppDef.ProcessName
         ExecutablePath   = $foundExe
+        ExecutionAlias   = $aliasExe
+        IconPath         = $iconPath
         DiscoverySource  = $discoverySource
         AppUserModelId   = $AppDef.Aumid
         AumidHash        = $primaryHash

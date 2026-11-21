@@ -2,7 +2,7 @@
 .SYNOPSIS
     SplitSpace Uninstaller
 .DESCRIPTION
-    Restores default Windows Jump List configuration, removes '+ SplitSpace' taskbar tasks,
+    Restores default Windows Jump List configuration, removes '+ SplitSpace' / '+ <AppName>' taskbar tasks,
     cleans up shortcuts, and optionally clears secondary session caches.
 #>
 
@@ -69,6 +69,16 @@ if ($targetsToUninstall.Count -gt 0) {
     }
 }
 
+# Explicit cleanup for Cursor if previously modified
+$customDestDir = Join-Path $env:APPDATA "Microsoft\Windows\Recent\CustomDestinations"
+$cursorHash = "8346f26264213ffa"
+$cursorDest = Join-Path $customDestDir "$cursorHash.customDestinations-ms"
+$cursorBak = "$cursorDest.bak"
+if (Test-Path $cursorBak) {
+    Copy-Item -Path $cursorBak -Destination $cursorDest -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $cursorBak -Force -ErrorAction SilentlyContinue
+}
+
 # Clean Start Menu shortcuts
 $startMenuDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
 if (Test-Path $startMenuDir) {
@@ -82,6 +92,11 @@ if (-not $KeepProfiles -and (Test-Path $splitSpaceBase)) {
     Remove-Item -Path $splitSpaceBase -Recurse -Force -ErrorAction SilentlyContinue
     Write-Host "[OK] Cleaned session profiles at $splitSpaceBase." -ForegroundColor Green
 }
+
+# Notify Windows Shell
+try {
+    [SplitSpaceShell.JumpListHelper]::NotifyShell()
+} catch {}
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan

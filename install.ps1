@@ -3,8 +3,9 @@
     SplitSpace Installer
 .DESCRIPTION
     Dynamically discovers installed AI desktop applications (Google Antigravity,
-    Claude Desktop, ChatGPT Desktop, Cursor, Windsurf, Perplexity, LM Studio, Chatbox)
+    Anthropic Claude Desktop, OpenAI ChatGPT Desktop, Windsurf, Perplexity, LM Studio, Chatbox)
     and registers native Windows Taskbar right-click Jump List tasks (+ <AppName> / + SplitSpace).
+    Note: Cursor is intentionally excluded because it provides native multi-window support (Ctrl+Shift+N).
 #>
 
 [CmdletBinding()]
@@ -54,7 +55,7 @@ if ($App -and $App -ne "auto" -and $App -ne "all") {
     } else {
         Write-Host ""
         Write-Host "[ERROR] Requested application '$App' was not found on this computer." -ForegroundColor Red
-        Write-Host "Supported applications: Antigravity, Claude, ChatGPT, Cursor, Windsurf, Perplexity, LMStudio, Chatbox." -ForegroundColor Yellow
+        Write-Host "Supported applications: Antigravity, Claude, ChatGPT, Windsurf, Perplexity, LMStudio, Chatbox." -ForegroundColor Yellow
         exit 1
     }
 } else {
@@ -65,7 +66,7 @@ if ($App -and $App -ne "auto" -and $App -ne "all") {
     } else {
         Write-Host ""
         Write-Host "[NOTICE] No supported AI desktop applications were detected on this computer." -ForegroundColor Yellow
-        Write-Host "Supported applications: Antigravity, Claude, ChatGPT, Cursor, Windsurf, Perplexity, LMStudio, Chatbox." -ForegroundColor Gray
+        Write-Host "Supported applications: Antigravity, Claude, ChatGPT, Windsurf, Perplexity, LMStudio, Chatbox." -ForegroundColor Gray
         exit 1
     }
 }
@@ -111,7 +112,7 @@ if ($successCount -gt 0) {
     Write-Host "Installation Complete! ($successCount application(s) configured)" -ForegroundColor Green
     Write-Host "How to use:" -ForegroundColor White
     Write-Host "  1. Right-click the app icon on your Windows Taskbar." -ForegroundColor Gray
-    Write-Host "  2. Click the '+' task (e.g. '+ Antigravity', '+ Cursor') to open an independent floating window." -ForegroundColor Gray
+    Write-Host "  2. Click the '+' task (e.g. '+ Antigravity', '+ Claude', '+ ChatGPT') to open an independent floating window." -ForegroundColor Gray
     Write-Host "  3. Work on multiple project folders or prompts simultaneously." -ForegroundColor Gray
 } else {
     Write-Host "Installation completed with warnings." -ForegroundColor Yellow
