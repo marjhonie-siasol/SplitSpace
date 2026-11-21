@@ -1,0 +1,384 @@
+<#
+.SYNOPSIS
+    SplitSpace Windows Taskbar Jump List Manager
+.DESCRIPTION
+    Injects and manages native Windows Taskbar right-click Jump List tasks (+ SplitSpace / + <AppName>)
+    using dynamic path resolution, binary stream assembly, Windows Shell PropertyStore,
+    and Explorer notifications for any supported AI desktop application.
+#>
+
+$propertyStoreSource = @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace SplitSpaceShell {
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct PROPERTYKEY {
+        public Guid fmtid;
+        public uint pid;
+        public PROPERTYKEY(Guid g, uint p) { fmtid = g; pid = p; }
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct PROPVARIANT {
+        [FieldOffset(0)] public ushort vt;
+        [FieldOffset(8)] public IntPtr pwszVal;
+    }
+
+    [ComImport]
+    [Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IPropertyStore {
+        [PreserveSig] int GetCount(out uint cProps);
+        [PreserveSig] int GetAt(uint iProp, out PROPERTYKEY pkey);
+        [PreserveSig] int GetValue(ref PROPERTYKEY key, out PROPVARIANT pv);
+        [PreserveSig] int SetValue(ref PROPERTYKEY key, ref PROPVARIANT propvar);
+        [PreserveSig] int Commit();
+    }
+
+    public class JumpListHelper {
+        [DllImport("propsys.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern int PSGetPropertyKeyFromName(string pszName, out PROPERTYKEY pkey);
+
+        [DllImport("shell32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern int SHGetPropertyStoreFromParsingName(
+            string pszPath,
+            IntPtr zero,
+            int flags, // GPS_READWRITE = 2
+            ref Guid riid,
+            [MarshalAs(UnmanagedType.Interface)] out IPropertyStore ppv);
+
+        [DllImport("shell32.dll")]
+        public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+        public static int SetShortcutTitle(string lnkPath, string title) {
+            PROPERTYKEY pkeyTitle;
+            int hr = PSGetPropertyKeyFromName("System.Title", out pkeyTitle);
+            if (hr != 0) {
+                // Official System.Title PKEY GUID: {F29F85E0-4FF9-1068-AB91-08002B27B3D9}, PID: 2
+                pkeyTitle = new PROPERTYKEY(new Guid("f29f85e0-4ff9-1068-ab91-08002b27b3d9"), 2);
+            }
+
+            Guid iid = new Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99");
+            IPropertyStore store = null;
+            hr = SHGetPropertyStoreFromParsingName(lnkPath, IntPtr.Zero, 2, ref iid, out store);
+            if (hr != 0) return hr;
+
+            try {
+                PROPVARIANT pv = new PROPVARIANT();
+                pv.vt = 31; // VT_LPWSTR
+                pv.pwszVal = Marshal.StringToCoTaskMemUni(title);
+
+                hr = store.SetValue(ref pkeyTitle, ref pv);
+                if (hr == 0) {
+                    hr = store.Commit();
+                }
+                Marshal.FreeCoTaskMem(pv.pwszVal);
+            } finally {
+                if (store != null) {
+                    Marshal.ReleaseComObject(store);
+                }
+            }
+            return hr;
+        }
+
+        public static void NotifyShell() {
+            // SHCNE_ASSOCCHANGED = 0x08000000, SHCNF_IDLIST = 0x0000
+            SHChangeNotify(0x08000000, 0x0000, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+}
+'@
+
+if (-not ([System.Management.Automation.PSTypeName]'SplitSpaceShell.JumpListHelper').Type) {
+    Add-Type -TypeDefinition $propertyStoreSource -ErrorAction SilentlyContinue
+}
+
+function Set-SplitSpaceJumpList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [PSCustomObject]$TargetApp,
+
+        [Parameter()]
+        [string]$TaskLabel = "+ SplitSpace"
+    )
+
+    $libPath = $PSScriptRoot
+    if (-not $libPath) {
+        $libPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+    }
+    if (-not $libPath) {
+        $libPath = (Get-Location).Path
+    }
+    $projectRoot = Split-Path -Parent $libPath
+    $vbsLauncher = Join-Path $projectRoot "bin\splitspace.vbs"
+
+    $splitSpaceBase = Join-Path $env:LOCALAPPDATA "SplitSpace"
+    if (-not (Test-Path $splitSpaceBase)) {
+        New-Item -ItemType Directory -Path $splitSpaceBase -Force | Out-Null
+    }
+
+    # Step 1: Gather all candidate CustomDestinations hashes for this application
+    $targetHashes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    if ($TargetApp.AumidHashes) {
+        foreach ($h in $TargetApp.AumidHashes) {
+            if ($h -and $h.Length -eq 16) { [void]$targetHashes.Add($h) }
+        }
+    }
+    if ($TargetApp.AumidHash -and $TargetApp.AumidHash.Length -eq 16) {
+        [void]$targetHashes.Add($TargetApp.AumidHash)
+    }
+
+    if ($targetHashes.Count -eq 0) {
+        Write-Warning "No Jump List destination hash resolved for $($TargetApp.DisplayName)."
+        return $false
+    }
+
+    $customDestDir = Join-Path $env:APPDATA "Microsoft\Windows\Recent\CustomDestinations"
+    if (-not (Test-Path $customDestDir)) {
+        New-Item -ItemType Directory -Path $customDestDir -Force | Out-Null
+    }
+
+    # Step 2: Ensure isolated profile slot directory is prepared and seeded
+    $slotDir = Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA "SplitSpace") "profiles") (Join-Path $TargetApp.AppName "slot-1")
+    if (-not (Test-Path $slotDir)) {
+        New-Item -ItemType Directory -Path $slotDir -Force | Out-Null
+    }
+    if ($TargetApp.DefaultUserData -and (Test-Path $TargetApp.DefaultUserData)) {
+        $seedFiles = @("Local State", "Preferences", "app_storage.json")
+        foreach ($f in $seedFiles) {
+            $src = Join-Path $TargetApp.DefaultUserData $f
+            $dst = Join-Path $slotDir $f
+            if ((Test-Path $src) -and (-not (Test-Path $dst))) {
+                Copy-Item -Path $src -Destination $dst -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    # Step 3: Check if any authentic backup or template exists for this application
+    $templateBytes = $null
+    foreach ($h in $targetHashes) {
+        $bakCandidate = Join-Path $customDestDir "$h.customDestinations-ms.bak"
+        if (Test-Path $bakCandidate) {
+            $candidateBytes = [System.IO.File]::ReadAllBytes($bakCandidate)
+            if ($candidateBytes.Length -gt 3000) {
+                $templateBytes = $candidateBytes
+                break
+            }
+        }
+    }
+
+    # Step 4: Build authentic Windows ShellLink for the multi-window task
+    $tempLnkPath = Join-Path $splitSpaceBase "task_$($TargetApp.AppName).lnk"
+    if (Test-Path $tempLnkPath) {
+        Remove-Item -Path $tempLnkPath -Force -ErrorAction SilentlyContinue
+    }
+
+    $wsh = New-Object -ComObject WScript.Shell
+    $sc = $wsh.CreateShortcut($tempLnkPath)
+    $sc.TargetPath = $TargetApp.ExecutablePath
+    $sc.Arguments = "--user-data-dir=`"$slotDir`""
+    $sc.WorkingDirectory = Split-Path -Parent $TargetApp.ExecutablePath
+    $sc.Description = "Open an independent $($TargetApp.DisplayName) workspace window"
+    $sc.IconLocation = "$($TargetApp.ExecutablePath),0"
+    $sc.Save()
+
+    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($sc) | Out-Null
+    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) | Out-Null
+    [System.GC]::Collect()
+
+    try {
+        [SplitSpaceShell.JumpListHelper]::SetShortcutTitle($tempLnkPath, $TaskLabel) | Out-Null
+    } catch {}
+
+    [System.GC]::Collect()
+
+    $taskLnkBytes = $null
+    for ($attempt = 0; $attempt -lt 5; $attempt++) {
+        try {
+            $taskLnkBytes = [System.IO.File]::ReadAllBytes($tempLnkPath)
+            break
+        } catch {
+            Start-Sleep -Milliseconds 100
+        }
+    }
+
+    if (-not $taskLnkBytes -or $taskLnkBytes.Length -eq 0) {
+        Write-Error "Failed to generate task shortcut."
+        return $false
+    }
+
+    $delim = [byte[]]@(0xAB, 0xFB, 0xBF, 0xBA)
+    $finalBytes = $null
+
+    # Strategy A: Inject multi-window task into authentic template, preserving Recent Folders
+    if ($templateBytes) {
+        $d1 = -1
+        for ($i = 36; $i -lt $templateBytes.Length - 4; $i++) {
+            if ($templateBytes[$i] -eq 0xAB -and $templateBytes[$i+1] -eq 0xFB -and $templateBytes[$i+2] -eq 0xBF -and $templateBytes[$i+3] -eq 0xBA) {
+                $d1 = $i
+                break
+            }
+        }
+
+        if ($d1 -gt 36) {
+            $ms = New-Object System.IO.MemoryStream
+            $bw = New-Object System.IO.BinaryWriter($ms)
+            # Write 0..35: File Header (12 bytes) + Category 1 Header (24 bytes)
+            $bw.Write($templateBytes, 0, 36)
+            # Write new authentic task LNK with isolated profile slot arguments
+            $bw.Write($taskLnkBytes, 0, $taskLnkBytes.Length)
+            # Write delimiter
+            $bw.Write($delim, 0, 4)
+            # Write remainder of template (Category 2 Recent Folders and terminal record)
+            $remStart = $d1 + 4
+            $remLen = $templateBytes.Length - $remStart
+            $bw.Write($templateBytes, $remStart, $remLen)
+            $finalBytes = $ms.ToArray()
+            $bw.Close()
+            $ms.Close()
+        }
+    }
+
+    # Strategy B: Clean single-category stream assembly (if no template available)
+    if (-not $finalBytes) {
+        $ms = New-Object System.IO.MemoryStream
+        $bw = New-Object System.IO.BinaryWriter($ms)
+
+        # Header: Version=2, CategoryCount=1, Reserved=0
+        $bw.Write([int32]2)
+        $bw.Write([int32]1)
+        $bw.Write([int32]0)
+
+        # Category 1: Tasks (Category Type = 2, Item Count = 1)
+        $bw.Write([int32]2)
+        $bw.Write([int32]1)
+        $shellLinkGuid = [byte[]]@(0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46)
+        $bw.Write($shellLinkGuid)
+        $bw.Write($taskLnkBytes, 0, $taskLnkBytes.Length)
+        $bw.Write($delim, 0, 4)
+
+        # Terminal record: 12 bytes
+        $bw.Write([byte[]]@(0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00))
+
+        $finalBytes = $ms.ToArray()
+        $bw.Close()
+        $ms.Close()
+    }
+
+    if (-not $finalBytes) {
+        Write-Error "Failed to generate Jump List binary stream."
+        return $false
+    }
+
+    # Step 3: Write destination files for all target hashes
+    foreach ($h in $targetHashes) {
+        $destFile = Join-Path $customDestDir "$h.customDestinations-ms"
+        $backupFile = "$destFile.bak"
+
+        # Backup existing file if valid and not already backed up
+        if ((Test-Path $destFile) -and (-not (Test-Path $backupFile))) {
+            $existing = [System.IO.File]::ReadAllBytes($destFile)
+            if ($existing.Length -gt 3000) {
+                Copy-Item -Path $destFile -Destination $backupFile -Force
+            }
+        }
+
+        [System.IO.File]::WriteAllBytes($destFile, $finalBytes)
+    }
+
+    # Step 5: Create Start Menu shortcut
+    $startMenuDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+    if (Test-Path $startMenuDir) {
+        $wsh2 = New-Object -ComObject WScript.Shell
+        $startMenuLnk = Join-Path $startMenuDir "SplitSpace ($($TargetApp.DisplayName)).lnk"
+        $scSm = $wsh2.CreateShortcut($startMenuLnk)
+        $scSm.TargetPath = $TargetApp.ExecutablePath
+        $scSm.Arguments = "--user-data-dir=`"$slotDir`""
+        $scSm.WorkingDirectory = Split-Path -Parent $TargetApp.ExecutablePath
+        $scSm.Description = "Launch secondary floating $($TargetApp.DisplayName) window"
+        $scSm.IconLocation = "$($TargetApp.ExecutablePath),0"
+        $scSm.Save()
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($scSm) | Out-Null
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh2) | Out-Null
+    }
+
+    # Step 5: Touch pinned taskbar shortcut to trigger Jump List cache refresh
+    $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+    if (Test-Path $taskbarPath) {
+        Get-ChildItem -Path $taskbarPath -Filter "*$($TargetApp.ProcessName)*.lnk" -ErrorAction SilentlyContinue | ForEach-Object {
+            $_.LastWriteTime = Get-Date
+        }
+    }
+
+    # Step 6: Notify Windows Shell to refresh taskbar
+    try {
+        [SplitSpaceShell.JumpListHelper]::NotifyShell()
+    } catch {}
+
+    return $true
+}
+
+function Remove-SplitSpaceJumpList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [PSCustomObject]$TargetApp
+    )
+
+    $targetHashes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    if ($TargetApp.AumidHashes) {
+        foreach ($h in $TargetApp.AumidHashes) {
+            if ($h -and $h.Length -eq 16) { [void]$targetHashes.Add($h) }
+        }
+    }
+    if ($TargetApp.AumidHash -and $TargetApp.AumidHash.Length -eq 16) {
+        [void]$targetHashes.Add($TargetApp.AumidHash)
+    }
+
+    $customDestDir = Join-Path $env:APPDATA "Microsoft\Windows\Recent\CustomDestinations"
+    foreach ($h in $targetHashes) {
+        $destFile = Join-Path $customDestDir "$h.customDestinations-ms"
+        $backupFile = "$destFile.bak"
+
+        if (Test-Path $backupFile) {
+            Copy-Item -Path $backupFile -Destination $destFile -Force
+            Remove-Item -Path $backupFile -Force -ErrorAction SilentlyContinue
+        } else {
+            if (Test-Path $destFile) {
+                Remove-Item -Path $destFile -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    # Remove Start Menu shortcut
+    $startMenuDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+    if (Test-Path $startMenuDir) {
+        $startMenuLnk = Join-Path $startMenuDir "SplitSpace ($($TargetApp.DisplayName)).lnk"
+        if (Test-Path $startMenuLnk) {
+            Remove-Item -Path $startMenuLnk -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    # Remove temp link in LocalAppData
+    $tempLnkPath = "$env:LOCALAPPDATA\SplitSpace\task_$($TargetApp.AppName).lnk"
+    if (Test-Path $tempLnkPath) {
+        Remove-Item -Path $tempLnkPath -Force -ErrorAction SilentlyContinue
+    }
+
+    # Touch pinned taskbar shortcut to trigger refresh
+    $taskbarPath = "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
+    if (Test-Path $taskbarPath) {
+        Get-ChildItem -Path $taskbarPath -Filter "*$($TargetApp.ProcessName)*.lnk" -ErrorAction SilentlyContinue | ForEach-Object {
+            $_.LastWriteTime = Get-Date
+        }
+    }
+
+    # Notify Windows Shell
+    try {
+        [SplitSpaceShell.JumpListHelper]::NotifyShell()
+    } catch {}
+
+    return $true
+}

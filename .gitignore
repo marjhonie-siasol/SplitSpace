@@ -1,0 +1,19 @@
+# Windows Shell artifacts and caches
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# SplitSpace runtime caches and backup files
+*.bak
+profiles/
+logs/
+
+# Development and scratch files
+*.tmp
+*.temp
+scratch/
+test_*.py
+test_*.ps1
+test_*.lnk
+assembled.*
