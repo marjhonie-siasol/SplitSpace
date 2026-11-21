@@ -280,8 +280,14 @@ function Resolve-SingleAppDetails {
             Get-ChildItem -Path $taskbarPath -Filter "*$($AppDef.ProcessName)*.lnk" -ErrorAction SilentlyContinue | ForEach-Object {
                 if (-not $foundExe) {
                     try {
+                        if ($AppDef.AppName -eq "Antigravity" -and ($_.Name -like "*IDE*" -or $_.Name -like "*antigravity-ide*")) {
+                            return
+                        }
                         $sc = $sh.CreateShortcut($_.FullName)
                         if ($sc.TargetPath -and (Test-Path $sc.TargetPath)) {
+                            if ($AppDef.AppName -eq "Antigravity" -and ($sc.TargetPath -like "*IDE*" -or $sc.TargetPath -like "*antigravity-ide*")) {
+                                return
+                            }
                             $foundExe = $sc.TargetPath
                             $discoverySource = "Taskbar Shortcut ($($_.Name))"
                         }
@@ -314,8 +320,14 @@ function Resolve-SingleAppDetails {
                 Get-ChildItem -Path $sm -Filter "*$($AppDef.ProcessName)*.lnk" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
                     if (-not $foundExe) {
                         try {
+                            if ($AppDef.AppName -eq "Antigravity" -and ($_.Name -like "*IDE*" -or $_.Name -like "*antigravity-ide*")) {
+                                return
+                            }
                             $sc = $sh.CreateShortcut($_.FullName)
                             if ($sc.TargetPath -and (Test-Path $sc.TargetPath)) {
+                                if ($AppDef.AppName -eq "Antigravity" -and ($sc.TargetPath -like "*IDE*" -or $sc.TargetPath -like "*antigravity-ide*")) {
+                                    return
+                                }
                                 $foundExe = $sc.TargetPath
                                 $discoverySource = "Start Menu ($($_.Name))"
                             }
@@ -339,6 +351,9 @@ function Resolve-SingleAppDetails {
                         $disp = $_.GetValue("DisplayName")
                         $loc = $_.GetValue("InstallLocation")
                         if ($disp -and ($disp -like "*$($AppDef.ProcessName)*") -and $loc) {
+                            if ($AppDef.AppName -eq "Antigravity" -and ($disp -like "*IDE*" -or $loc -like "*IDE*")) {
+                                return
+                            }
                             $candidate = Join-Path $loc "$($AppDef.ProcessName).exe"
                             if (Test-Path $candidate) {
                                 $foundExe = $candidate
@@ -395,6 +410,13 @@ function Resolve-SingleAppDetails {
                 Remove-Item -Path $stagedIco -Force -ErrorAction SilentlyContinue
             }
         } catch {}
+    } elseif ($AppDef.AppName -eq "Antigravity") {
+        # Google Antigravity desktop chat/agent client (white rounded tile with rainbow arch)
+        $canonicalExe = Join-Path $env:LOCALAPPDATA "Programs\antigravity\Antigravity.exe"
+        if (Test-Path $canonicalExe) {
+            $foundExe = $canonicalExe
+            $iconPath = "$canonicalExe,0"
+        }
     }
 
     if (-not $iconPath) {

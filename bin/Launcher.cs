@@ -129,6 +129,8 @@ namespace SplitSpace {
                     // Retain package execution alias for ChatGPT to preserve Store identity
                 } else if (appName.Equals("Claude", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(appExe) && File.Exists(appExe)) {
                     // Retain package execution alias for Claude to preserve Store identity
+                } else if (appName.Equals("Antigravity", StringComparison.OrdinalIgnoreCase) && args[1].IndexOf("IDE", StringComparison.OrdinalIgnoreCase) >= 0) {
+                    // Reject Antigravity IDE executable when launching standard Antigravity
                 } else {
                     appExe = args[1];
                 }
