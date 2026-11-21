@@ -282,12 +282,15 @@ function Set-SplitSpaceJumpList {
         $destFile = Join-Path $customDestDir "$h.customDestinations-ms"
         $backupFile = "$destFile.bak"
 
-        # Backup existing file if valid and not already backed up
+        # Backup existing file only if valid, authentic, and not containing SplitSpace
         if ((Test-Path $destFile) -and (-not (Test-Path $backupFile))) {
-            $existing = [System.IO.File]::ReadAllBytes($destFile)
-            if ($existing.Length -gt 3000) {
-                Copy-Item -Path $destFile -Destination $backupFile -Force
-            }
+            try {
+                $existing = [System.IO.File]::ReadAllBytes($destFile)
+                $existingTxt = [System.Text.Encoding]::Unicode.GetString($existing)
+                if ($existing.Length -gt 3000 -and ($existingTxt -notmatch "splitspace|\+\s*")) {
+                    Copy-Item -Path $destFile -Destination $backupFile -Force
+                }
+            } catch {}
         }
 
         [System.IO.File]::WriteAllBytes($destFile, $finalBytes)
@@ -348,8 +351,22 @@ function Remove-SplitSpaceJumpList {
         $backupFile = "$destFile.bak"
 
         if (Test-Path $backupFile) {
-            Copy-Item -Path $backupFile -Destination $destFile -Force
-            Remove-Item -Path $backupFile -Force -ErrorAction SilentlyContinue
+            $isContaminatedBackup = $false
+            try {
+                $bakBytes = [System.IO.File]::ReadAllBytes($backupFile)
+                $bakTxt = [System.Text.Encoding]::Unicode.GetString($bakBytes)
+                if ($bakTxt -match "splitspace|\+\s*") {
+                    $isContaminatedBackup = $true
+                }
+            } catch {}
+
+            if ($isContaminatedBackup) {
+                Remove-Item -Path $destFile -Force -ErrorAction SilentlyContinue
+                Remove-Item -Path $backupFile -Force -ErrorAction SilentlyContinue
+            } else {
+                Copy-Item -Path $backupFile -Destination $destFile -Force
+                Remove-Item -Path $backupFile -Force -ErrorAction SilentlyContinue
+            }
         } else {
             if (Test-Path $destFile) {
                 Remove-Item -Path $destFile -Force -ErrorAction SilentlyContinue
