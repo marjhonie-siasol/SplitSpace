@@ -118,7 +118,7 @@ Removes the `+ <AppName>` taskbar buttons and returns Windows to its default beh
 
 ## Contributing
 
-Contributions, suggestions, and issue reports are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, testing procedures, and code standards.
+Contributions, suggestions, and issue reports are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, testing procedures, and code standards. All community members are expected to follow our [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ---
 
