@@ -48,6 +48,39 @@ namespace SplitSpace {
         [DllImport("user32.dll")]
         public static extern bool IsWindowVisible(IntPtr hWnd);
 
+        static void CopyFileSafe(string src, string dst, bool overwrite) {
+            try {
+                if (File.Exists(src)) {
+                    string dir = Path.GetDirectoryName(dst);
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    File.Copy(src, dst, overwrite);
+                }
+            } catch {}
+        }
+
+        static void CopyDirectorySafe(string srcDir, string dstDir, bool overwrite) {
+            try {
+                if (!Directory.Exists(srcDir)) return;
+                if (!Directory.Exists(dstDir)) Directory.CreateDirectory(dstDir);
+
+                foreach (string file in Directory.GetFiles(srcDir)) {
+                    string name = Path.GetFileName(file);
+                    if (name.Equals("LOCK", StringComparison.OrdinalIgnoreCase) ||
+                        name.EndsWith(".lock", StringComparison.OrdinalIgnoreCase) ||
+                        name.EndsWith("-journal", StringComparison.OrdinalIgnoreCase)) continue;
+                    string destFile = Path.Combine(dstDir, name);
+                    if (overwrite || !File.Exists(destFile)) {
+                        try { File.Copy(file, destFile, overwrite); } catch {}
+                    }
+                }
+
+                foreach (string sub in Directory.GetDirectories(srcDir)) {
+                    string name = Path.GetFileName(sub);
+                    CopyDirectorySafe(sub, Path.Combine(dstDir, name), overwrite);
+                }
+            } catch {}
+        }
+
         static void Main(string[] args) {
             string appName = args.Length > 0 ? args[0] : "Antigravity";
             string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -156,7 +189,10 @@ namespace SplitSpace {
             string chosenSlotDir = Path.Combine(baseDir, "slot-" + selectedSlot);
             Directory.CreateDirectory(chosenSlotDir);
 
-            // Seed user data if slot is fresh
+            string templateDir = Path.Combine(baseDir, "template");
+            Directory.CreateDirectory(templateDir);
+
+            // Synchronize active authentication session into template if primary user data is accessible
             if (!string.IsNullOrEmpty(defaultUserData) && Directory.Exists(defaultUserData)) {
                 string[] filesToSeed = new string[] {
                     "Local State",
@@ -164,14 +200,88 @@ namespace SplitSpace {
                     "app_storage.json",
                     "config.json",
                     "claude_desktop_config.json",
-                    "browser-sidebar-local-servers.json"
+                    "browser-sidebar-local-servers.json",
+                    "ant-did"
                 };
                 foreach (string f in filesToSeed) {
                     string src = Path.Combine(defaultUserData, f);
-                    string dst = Path.Combine(chosenSlotDir, f);
-                    if (File.Exists(src) && !File.Exists(dst)) {
-                        try { File.Copy(src, dst, false); } catch {}
+                    string dst = Path.Combine(templateDir, f);
+                    CopyFileSafe(src, dst, true);
+                }
+
+                CopyDirectorySafe(Path.Combine(defaultUserData, "Network"), Path.Combine(templateDir, "Network"), true);
+                CopyDirectorySafe(Path.Combine(defaultUserData, "Local Storage"), Path.Combine(templateDir, "Local Storage"), true);
+            }
+
+            // Fallback sync from any existing active/idle slot if template is missing cookies
+            string templateCookies = Path.Combine(templateDir, @"Network\Cookies");
+            if (!File.Exists(templateCookies)) {
+                for (int s = 1; s <= 20; s++) {
+                    string candidateCookies = Path.Combine(baseDir, "slot-" + s, @"Network\Cookies");
+                    if (File.Exists(candidateCookies)) {
+                        try {
+                            CopyDirectorySafe(Path.Combine(baseDir, "slot-" + s), templateDir, false);
+                            break;
+                        } catch {}
                     }
+                }
+            }
+
+            // Seed user data if chosen slot is fresh or missing authentication
+            bool slotNeedsSession = false;
+            string slotCookies = Path.Combine(chosenSlotDir, @"Network\Cookies");
+            string slotCfgCheck = Path.Combine(chosenSlotDir, "config.json");
+            if (appName.Equals("Claude", StringComparison.OrdinalIgnoreCase)) {
+                bool hasOauth = false;
+                try {
+                    if (File.Exists(slotCfgCheck)) {
+                        hasOauth = File.ReadAllText(slotCfgCheck).Contains("oauth:tokenCache");
+                    }
+                } catch {}
+                slotNeedsSession = !File.Exists(slotCookies) || !File.Exists(slotCfgCheck) || !hasOauth;
+            } else if (appName.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase)) {
+                slotNeedsSession = !File.Exists(slotCookies);
+            } else {
+                slotNeedsSession = !File.Exists(Path.Combine(chosenSlotDir, "Preferences")) && !File.Exists(Path.Combine(chosenSlotDir, "Local State"));
+            }
+
+            if (slotNeedsSession) {
+                string seedSource = Directory.Exists(templateDir) && File.Exists(templateCookies) ? templateDir : defaultUserData;
+                if (!string.IsNullOrEmpty(seedSource) && Directory.Exists(seedSource)) {
+                    string[] filesToSeed = new string[] {
+                        "Local State",
+                        "Preferences",
+                        "app_storage.json",
+                        "config.json",
+                        "claude_desktop_config.json",
+                        "browser-sidebar-local-servers.json",
+                        "ant-did"
+                    };
+                    foreach (string f in filesToSeed) {
+                        CopyFileSafe(Path.Combine(seedSource, f), Path.Combine(chosenSlotDir, f), true);
+                    }
+                    CopyDirectorySafe(Path.Combine(seedSource, "Network"), Path.Combine(chosenSlotDir, "Network"), true);
+                    CopyDirectorySafe(Path.Combine(seedSource, "Local Storage"), Path.Combine(chosenSlotDir, "Local Storage"), true);
+                }
+            }
+
+            // For Claude: guarantee signed-in state marker in slot config.json
+            if (appName.Equals("Claude", StringComparison.OrdinalIgnoreCase)) {
+                string slotCfg = Path.Combine(chosenSlotDir, "config.json");
+                if (File.Exists(slotCfg)) {
+                    try {
+                        string json = File.ReadAllText(slotCfg);
+                        if (json.Contains("\"windowSizeWasSignedIn\": false")) {
+                            json = json.Replace("\"windowSizeWasSignedIn\": false", "\"windowSizeWasSignedIn\": true");
+                            File.WriteAllText(slotCfg, json);
+                        } else if (!json.Contains("\"windowSizeWasSignedIn\"")) {
+                            json = json.TrimEnd();
+                            if (json.EndsWith("}")) {
+                                json = json.Substring(0, json.Length - 1).TrimEnd() + ",\"windowSizeWasSignedIn\":true}";
+                                File.WriteAllText(slotCfg, json);
+                            }
+                        }
+                    } catch {}
                 }
             }
 

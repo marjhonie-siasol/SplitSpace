@@ -384,17 +384,15 @@ function Resolve-SingleAppDetails {
         try {
             $cPkg = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq "Claude_pzs8sxrjxfjjc" } | Select-Object -First 1
             if ($cPkg -and $cPkg.InstallLocation) {
-                $stagedIco = Join-Path $iconsDir "Claude.ico"
-                $trayIco = Join-Path $cPkg.InstallLocation "app\resources\Tray-Win32.ico"
-                if (Test-Path $trayIco) {
-                    Copy-Item -Path $trayIco -Destination $stagedIco -Force -ErrorAction SilentlyContinue
-                    $iconPath = $stagedIco
-                } else {
-                    $cExe = Join-Path $cPkg.InstallLocation "app\Claude.exe"
-                    if (Test-Path $cExe) {
-                        $iconPath = "$cExe,0"
-                    }
+                $cExe = Join-Path $cPkg.InstallLocation "app\Claude.exe"
+                if (Test-Path $cExe) {
+                    $iconPath = "$cExe,0"
                 }
+            }
+            # Remove legacy monochrome tray icon if previously cached
+            $stagedIco = Join-Path $iconsDir "Claude.ico"
+            if (Test-Path $stagedIco) {
+                Remove-Item -Path $stagedIco -Force -ErrorAction SilentlyContinue
             }
         } catch {}
     }

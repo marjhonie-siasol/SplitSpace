@@ -85,11 +85,45 @@ Write-Host ""
 # Ensure dynamic multi-slot launcher is compiled and ready
 $launcherSrc = Join-Path $scriptDir "bin\Launcher.cs"
 $launcherDst = Join-Path $scriptDir "bin\splitspace.exe"
-if (-not (Test-Path $launcherDst) -and (Test-Path $launcherSrc)) {
+$shouldCompile = (-not (Test-Path $launcherDst)) -or $Force
+if (-not $shouldCompile -and (Test-Path $launcherSrc) -and (Test-Path $launcherDst)) {
+    if ((Get-Item $launcherSrc).LastWriteTime -gt (Get-Item $launcherDst).LastWriteTime) {
+        $shouldCompile = $true
+    }
+}
+if ($shouldCompile -and (Test-Path $launcherSrc)) {
     $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
     if (Test-Path $csc) {
         Write-Host "[*] Compiling dynamic multi-slot launcher..." -ForegroundColor Gray
         & $csc /target:winexe /r:System.Management.dll /out:$launcherDst $launcherSrc | Out-Null
+    }
+}
+
+# Pre-seed session template for Claude if primary user data is present
+$claudeData = "$env:LOCALAPPDATA\Claude-Data\claude_pzs8sxrjxfjjc"
+if (Test-Path $claudeData) {
+    $claudeTemplate = Join-Path $env:LOCALAPPDATA "SplitSpace\profiles\Claude\template"
+    if (-not (Test-Path $claudeTemplate)) {
+        New-Item -ItemType Directory -Path $claudeTemplate -Force | Out-Null
+    }
+    $cFiles = @("Local State", "Preferences", "config.json", "claude_desktop_config.json", "ant-did")
+    foreach ($cf in $cFiles) {
+        $cSrc = Join-Path $claudeData $cf
+        if (Test-Path $cSrc) {
+            Copy-Item -Path $cSrc -Destination (Join-Path $claudeTemplate $cf) -Force -ErrorAction SilentlyContinue
+        }
+    }
+    $netSrc = Join-Path $claudeData "Network"
+    if (Test-Path $netSrc) {
+        $netDst = Join-Path $claudeTemplate "Network"
+        if (-not (Test-Path $netDst)) { New-Item -ItemType Directory -Path $netDst -Force | Out-Null }
+        Copy-Item -Path "$netSrc\*" -Destination $netDst -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $lsSrc = Join-Path $claudeData "Local Storage"
+    if (Test-Path $lsSrc) {
+        $lsDst = Join-Path $claudeTemplate "Local Storage"
+        if (-not (Test-Path $lsDst)) { New-Item -ItemType Directory -Path $lsDst -Force | Out-Null }
+        Copy-Item -Path "$lsSrc\*" -Destination $lsDst -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
