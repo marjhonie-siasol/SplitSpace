@@ -110,24 +110,24 @@ Removes the `+ <AppName>` taskbar buttons and returns Windows to its default beh
 | **Uninstall Single App** | `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1 -App Claude` |
 
 > [!TIP]
-> If your PowerShell terminal is in a different directory, run using the full path:  
-> `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\OneDrive\Desktop\SplitSpace\install.ps1"`  
-> `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\OneDrive\Desktop\SplitSpace\uninstall.ps1"`
+> If your PowerShell terminal is in a different directory, provide the full path to the script:  
+> `powershell -ExecutionPolicy Bypass -File "C:\Path\To\SplitSpace\install.ps1"`  
+> `powershell -ExecutionPolicy Bypass -File "C:\Path\To\SplitSpace\uninstall.ps1"`
 
 ---
 
 ## Contributing
 
-Contributions, suggestions, and issue reports are welcome.
+Contributions, suggestions, and issue reports are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, testing procedures, and code standards.
 
-1. Fork the repository.
-2. Create a dedicated branch: `git checkout -b feature/improvement`.
-3. Commit your changes: `git commit -m "Describe your update"`.
-4. Push to your branch: `git push origin feature/improvement`.
-5. Submit a Pull Request.
+---
+
+## Security
+
+Please review [SECURITY.md](SECURITY.md) for our security architecture, local isolation boundaries, and vulnerability reporting procedures.
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
