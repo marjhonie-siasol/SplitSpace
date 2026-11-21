@@ -46,72 +46,46 @@ SplitSpace resolves this limitation at the operating system level without modify
 
 ---
 
-## Installation
+## Quick Start
 
-### Prerequisites
-- Windows 10 (version 1809 or higher) or Windows 11
-- Windows PowerShell 5.1 or PowerShell 7+
-- Standard user permissions (no administrator prompt required)
+Open Windows PowerShell (no administrator prompt required) and use the commands below.
 
-### Quick Start
-Clone or download this repository, open PowerShell in the directory, and run:
-
+### 1. Install
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
+Automatically scans your system, detects all installed AI desktop applications (Google Antigravity, Cursor, Claude, ChatGPT, etc.), and injects the `+ <AppName>` taskbar button.
 
-By default, SplitSpace scans your environment for all supported applications and registers taskbar multi-window tasks for every detected client.
+### 2. How to Use
+1. Right-click the app icon on your Windows Taskbar (e.g. Google Antigravity).
+2. Click **`+ Antigravity`** (or `+ Cursor`).
+3. An independent floating window opens immediately. Click it again anytime to open Window 3, Window 4, and beyond.
 
-### Targeting Specific Applications
-To configure a specific tool:
-
+### 3. Uninstall
 ```powershell
-# Google Antigravity
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -App Antigravity
-
-# Cursor
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -App Cursor
-
-# Claude Desktop
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -App Claude
-
-# ChatGPT Desktop
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -App ChatGPT
-```
-
-### Custom Task Labels
-You can customize the text that appears in your taskbar menu:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -App Antigravity -TaskLabel "+ New Workspace"
-```
-
----
-
-## Workflow
-
-1. **Right-Click**: Right-click any configured AI application icon on your Windows Taskbar.
-2. **Launch**: Click the taskbar item (e.g., `+ Antigravity`, `+ Cursor`).
-3. **Multitask**: An independent floating window opens immediately. You can now arrange windows across multiple monitors, open separate project directories, and run concurrent agent sessions simultaneously.
-
----
-
-## Uninstallation
-
-To restore original Windows single-window behavior:
-
-```powershell
-# Restore all configured applications
 powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
-
-# Restore a specific application only
-powershell -ExecutionPolicy Bypass -File .\uninstall.ps1 -App Antigravity
 ```
+Removes the `+ <AppName>` taskbar buttons and restores default single-window Windows behavior.
 
-The uninstaller:
-- Restores original Jump List streams from `.bak` snapshots.
-- Removes created Start Menu shortcuts.
-- Cleans isolated session profile directories (`%LOCALAPPDATA%\SplitSpace`).
+---
+
+## Command Reference
+
+| Action | PowerShell Command |
+| :--- | :--- |
+| **Install for All Apps** | `powershell -ExecutionPolicy Bypass -File .\install.ps1` |
+| **Install Antigravity Only** | `powershell -ExecutionPolicy Bypass -File .\install.ps1 -App Antigravity` |
+| **Install Cursor Only** | `powershell -ExecutionPolicy Bypass -File .\install.ps1 -App Cursor` |
+| **Install Claude Only** | `powershell -ExecutionPolicy Bypass -File .\install.ps1 -App Claude` |
+| **Install ChatGPT Only** | `powershell -ExecutionPolicy Bypass -File .\install.ps1 -App ChatGPT` |
+| **Custom Taskbar Title** | `powershell -ExecutionPolicy Bypass -File .\install.ps1 -App Antigravity -TaskLabel "+ New Workspace"` |
+| **Uninstall All Apps** | `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1` |
+| **Uninstall Antigravity Only** | `powershell -ExecutionPolicy Bypass -File .\uninstall.ps1 -App Antigravity` |
+
+> [!NOTE]
+> If your PowerShell terminal is in a different folder (like `system32`), run with the full path:  
+> `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\OneDrive\Desktop\SplitSpace\install.ps1"`  
+> `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\OneDrive\Desktop\SplitSpace\uninstall.ps1"`
 
 ---
 
