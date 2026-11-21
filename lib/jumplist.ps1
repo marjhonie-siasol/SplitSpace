@@ -140,19 +140,21 @@ function Set-SplitSpaceJumpList {
         New-Item -ItemType Directory -Path $customDestDir -Force | Out-Null
     }
 
-    # Step 2: Ensure isolated profile slot directory is prepared and seeded
-    $slotDir = Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA "SplitSpace") "profiles") (Join-Path $TargetApp.AppName "slot-1")
-    if (-not (Test-Path $slotDir)) {
-        New-Item -ItemType Directory -Path $slotDir -Force | Out-Null
+    # Step 2: Ensure SplitSpace dynamic multi-slot launcher is prepared
+    $binDir = Join-Path $splitSpaceBase "bin"
+    if (-not (Test-Path $binDir)) {
+        New-Item -ItemType Directory -Path $binDir -Force | Out-Null
     }
-    if ($TargetApp.DefaultUserData -and (Test-Path $TargetApp.DefaultUserData)) {
-        $seedFiles = @("Local State", "Preferences", "app_storage.json")
-        foreach ($f in $seedFiles) {
-            $src = Join-Path $TargetApp.DefaultUserData $f
-            $dst = Join-Path $slotDir $f
-            if ((Test-Path $src) -and (-not (Test-Path $dst))) {
-                Copy-Item -Path $src -Destination $dst -Force -ErrorAction SilentlyContinue
-            }
+    $launcherExe = Join-Path $binDir "splitspace.exe"
+    $repoLauncher = Join-Path $projectRoot "bin\splitspace.exe"
+    $repoLauncherSource = Join-Path $projectRoot "bin\Launcher.cs"
+
+    if (Test-Path $repoLauncher) {
+        Copy-Item -Path $repoLauncher -Destination $launcherExe -Force -ErrorAction SilentlyContinue
+    } elseif (Test-Path $repoLauncherSource) {
+        $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+        if (Test-Path $csc) {
+            & $csc /target:winexe /r:System.Management.dll /out:$launcherExe $repoLauncherSource | Out-Null
         }
     }
 
@@ -175,12 +177,15 @@ function Set-SplitSpaceJumpList {
         Remove-Item -Path $tempLnkPath -Force -ErrorAction SilentlyContinue
     }
 
+    $targetExePath = if (Test-Path $launcherExe) { $launcherExe } else { $TargetApp.ExecutablePath }
+    $targetArgs = if (Test-Path $launcherExe) { "$($TargetApp.AppName) `"$($TargetApp.ExecutablePath)`"" } else { "--user-data-dir=`"$splitSpaceBase\profiles\$($TargetApp.AppName)\slot-1`"" }
+
     $wsh = New-Object -ComObject WScript.Shell
     $sc = $wsh.CreateShortcut($tempLnkPath)
-    $sc.TargetPath = $TargetApp.ExecutablePath
-    $sc.Arguments = "--user-data-dir=`"$slotDir`""
+    $sc.TargetPath = $targetExePath
+    $sc.Arguments = $targetArgs
     $sc.WorkingDirectory = Split-Path -Parent $TargetApp.ExecutablePath
-    $sc.Description = "Open an independent $($TargetApp.DisplayName) workspace window"
+    $sc.Description = "Launch an independent $($TargetApp.DisplayName) workspace window"
     $sc.IconLocation = "$($TargetApp.ExecutablePath),0"
     $sc.Save()
 
@@ -294,10 +299,10 @@ function Set-SplitSpaceJumpList {
         $wsh2 = New-Object -ComObject WScript.Shell
         $startMenuLnk = Join-Path $startMenuDir "SplitSpace ($($TargetApp.DisplayName)).lnk"
         $scSm = $wsh2.CreateShortcut($startMenuLnk)
-        $scSm.TargetPath = $TargetApp.ExecutablePath
-        $scSm.Arguments = "--user-data-dir=`"$slotDir`""
+        $scSm.TargetPath = $targetExePath
+        $scSm.Arguments = $targetArgs
         $scSm.WorkingDirectory = Split-Path -Parent $TargetApp.ExecutablePath
-        $scSm.Description = "Launch secondary floating $($TargetApp.DisplayName) window"
+        $scSm.Description = "Launch an independent floating $($TargetApp.DisplayName) window"
         $scSm.IconLocation = "$($TargetApp.ExecutablePath),0"
         $scSm.Save()
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($scSm) | Out-Null

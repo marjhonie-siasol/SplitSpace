@@ -81,6 +81,17 @@ foreach ($t in $targetsToInstall) {
 }
 Write-Host ""
 
+# Ensure dynamic multi-slot launcher is compiled and ready
+$launcherSrc = Join-Path $scriptDir "bin\Launcher.cs"
+$launcherDst = Join-Path $scriptDir "bin\splitspace.exe"
+if (-not (Test-Path $launcherDst) -and (Test-Path $launcherSrc)) {
+    $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+    if (Test-Path $csc) {
+        Write-Host "[*] Compiling dynamic multi-slot launcher..." -ForegroundColor Gray
+        & $csc /target:winexe /r:System.Management.dll /out:$launcherDst $launcherSrc | Out-Null
+    }
+}
+
 $successCount = 0
 foreach ($t in $targetsToInstall) {
     $actualLabel = if ($TaskLabel) { $TaskLabel } else { "+ $($t.AppName)" }

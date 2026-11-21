@@ -34,23 +34,35 @@ if (!gotTheLock) {
 
 ---
 
-## 2. Decoupling Instances via Session Profiles
+## 2. Decoupling Instances via Dynamic Multi-Slot Allocation
 
-SplitSpace bypasses the singleton barrier by isolating the `--user-data-dir` argument:
+SplitSpace bypasses the singleton barrier by isolating the `--user-data-dir` argument across dynamic profile slots:
 
 ```text
 Primary Instance:
   UserData: %APPDATA%\Antigravity
-  Lockfile: %APPDATA%\Antigravity\SingletonLock
-  Pipe:     \\.\pipe\antigravity-primary-lock
+  Lockfile: %APPDATA%\Antigravity\lockfile
+  Scope:    Primary Default Session
 
-Secondary Instance (SplitSpace):
-  UserData: %LOCALAPPDATA%\SplitSpace\profiles\slot-1
-  Lockfile: %LOCALAPPDATA%\SplitSpace\profiles\slot-1\SingletonLock
-  Pipe:     \\.\pipe\splitspace-slot-1-lock
+Secondary Instance 1 (Slot 1):
+  UserData: %LOCALAPPDATA%\SplitSpace\profiles\Antigravity\slot-1
+  Lockfile: %LOCALAPPDATA%\SplitSpace\profiles\Antigravity\slot-1\lockfile
+  Scope:    Independent Floating Window 1
+
+Secondary Instance 2 (Slot 2):
+  UserData: %LOCALAPPDATA%\SplitSpace\profiles\Antigravity\slot-2
+  Lockfile: %LOCALAPPDATA%\SplitSpace\profiles\Antigravity\slot-2\lockfile
+  Scope:    Independent Floating Window 2
 ```
 
-Because the userData directory path is unique, Chromium generates a distinct named pipe and process boundary. Both processes run simultaneously without awareness of each other's lockfiles.
+Because each user data directory path is unique, Chromium generates a distinct named pipe and process boundary. Both processes run concurrently without colliding on singleton lockfiles or IPC channels.
+
+### Dynamic Slot Allocation Algorithm
+When the taskbar item is clicked, `splitspace.exe` executes:
+1. Queries active process command lines via Win32 process APIs to identify currently occupied slots (`slot-1` through `slot-20`).
+2. Identifies the lowest available slot number (reusing slots when earlier windows are closed).
+3. Verifies slot hydration; copies configuration and session files if the directory is newly initialized.
+4. Spawns the target application with `--user-data-dir="%LOCALAPPDATA%\SplitSpace\profiles\<AppName>\slot-<N>"`.
 
 ---
 
@@ -58,17 +70,17 @@ Because the userData directory path is unique, Chromium generates a distinct nam
 
 To ensure that opening a new window does not force the user to re-authenticate or log in again, SplitSpace uses a profile hydration strategy:
 
-1. When a secondary profile is created under `%LOCALAPPDATA%\SplitSpace\profiles\slot-N`:
-2. The launcher shim synchronizes essential authentication files from the primary profile:
-   - `Cookies` and `Cookies-journal` (Network cookies)
-   - `Local Storage\leveldb\` (Session state and active tokens)
-   - `IndexedDB\` (Client caches)
+1. When a secondary profile is created under `%LOCALAPPDATA%\SplitSpace\profiles\<AppName>\slot-N`:
+2. The launcher synchronizes essential configuration and local store files from the primary profile:
+   - `Local State` (Application preferences and encryption keys)
+   - `Preferences` (Interface themes, window configurations)
+   - `app_storage.json` (Conversation stores and account identifiers)
 3. Volatile locks and process-specific temporary files are excluded:
-   - `SingletonLock`
+   - `lockfile` / `SingletonLock`
    - `SingletonCookie`
    - `SingletonSocket`
    - `Crashpad\`
-4. The secondary window launches immediately authenticated, ready for immediate work.
+4. The secondary window launches immediately authenticated, ready for independent work.
 
 ---
 
@@ -78,26 +90,27 @@ Windows Taskbar Jump Lists are managed by the Windows Shell API. Custom actions 
 
 ```text
 +------------------------------------+
+| Recent Folders                     |
+|   cityamor-v2                      |
+|   data_collection                  |
+|   smart-ledger-demo                |
++------------------------------------+
 | Recent                             |
-|   Project-Frontend                 |
-|   Project-Backend-API              |
-|   Docs-Workspace                   |
+|   Recent Files & Documents         |
 +------------------------------------+
 | Tasks                              |
-|   + SplitSpace                     | <-- Injected by SplitSpace
-|   [Target Application]             |
+|   + Antigravity                    | <-- Injected by SplitSpace
+|   Antigravity                      |
 |   Unpin from taskbar               |
 |   Close window                     |
 +------------------------------------+
 ```
 
 ### Registration Flow
-1. `lib/jumplist.ps1` opens the application's pinned taskbar shortcut or Start Menu shortcut.
-2. It attaches a custom task:
-   - **Name**: `+ SplitSpace`
-   - **Path**: `%LOCALAPPDATA%\SplitSpace\bin\splitspace.cmd`
-   - **Icon**: Points to `Antigravity.exe,0` (uses native app icon)
-3. Windows Explorer updates its taskbar jump list cache immediately upon shortcut update.
+1. `lib/jumplist.ps1` extracts existing authentic Jump List streams (`*.customDestinations-ms.bak`).
+2. Generates an authentic Windows ShellLink (`.lnk`) targeting `splitspace.exe` with `PKEY_Title` set to `+ <AppName>`.
+3. Assembles the binary stream, preserving all Category 2 recent folders and terminal records.
+4. Notifies Windows Explorer via `SHChangeNotify(SHCNE_ASSOCCHANGED)` to reload the taskbar menu cache immediately.
 
 ---
 

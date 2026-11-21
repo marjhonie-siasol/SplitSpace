@@ -20,9 +20,9 @@ SplitSpace resolves this limitation at the operating system level without modify
 
 ## Core Capabilities
 
-- **Zero-Binary Architecture**: Built entirely on native PowerShell and Windows Shell COM interfaces (`IPropertyStore`, `ShellExecuteEx`). Requires no third-party runtimes, compiled executables, or administrative privileges.
+- **Dynamic Multi-Slot Scaling**: Intelligently identifies active instances and allocates dynamic profile slots (`slot-1` through `slot-20`). Clicking `+ <AppName>` continuously opens secondary, tertiary, and additional concurrent floating windows.
+- **Native Taskbar Jump List Integration**: Generates authentic Windows `CustomDestinations` binary streams with `PKEY_Title` property store support, seamlessly adding `+ <AppName>` tasks to the right-click menu.
 - **Dynamic Application Discovery**: Automatically scans running processes, Windows Registry hives, and user Start Menu shortcuts to identify installed AI desktop clients.
-- **Native Taskbar Jump List Integration**: Generates authentic Windows `CustomDestinations` streams with `PKEY_Title` property store support, seamlessly adding `+ <AppName>` tasks to the right-click menu.
 - **Recent Folders Preservation**: Reads existing Jump List streams to ensure recent folders, pinned workspaces, and history items remain fully intact.
 - **Profile State Seeding**: Automatically seeds isolated session profiles with existing preferences, appearance settings, and authentication state for immediate productivity.
 - **Symmetrical Lifecycle**: Provides clean, idempotent installation and complete uninstallation that restores default operating system Jump Lists from backups.
@@ -153,9 +153,11 @@ SplitSpace/
 ├── install.ps1              # Automated discovery & taskbar registration
 ├── uninstall.ps1            # Clean removal & Jump List restoration
 ├── bin/
+│   ├── Launcher.cs          # Native C# multi-slot dynamic launcher source
+│   ├── splitspace.exe       # Precompiled zero-overhead launcher runner
 │   ├── splitspace.cmd       # Command line wrapper
 │   ├── splitspace.vbs       # Silent runner without console flashing
-│   └── splitspace.ps1       # Process decoupler and multi-window launcher
+│   └── splitspace.ps1       # Process decoupler and multi-window launcher engine
 ├── lib/
 │   ├── discover.ps1         # Application auto-discovery engine
 │   └── jumplist.ps1         # Windows Shell Jump List binary stream manager
