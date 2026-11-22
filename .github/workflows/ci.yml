@@ -1,0 +1,124 @@
+name: Cross-Platform CI Pipeline
+
+on:
+  push:
+    branches:
+      - feature/cross-platform
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-windows:
+    name: Windows Pipeline Test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Validate PowerShell Script Syntax
+        shell: powershell
+        run: |
+          $scripts = @("install.ps1", "uninstall.ps1", "lib/discover.ps1", "lib/jumplist.ps1")
+          foreach ($s in $scripts) {
+              if (Test-Path $s) {
+                  $errors = $null
+                  [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $s).Path, [ref]$null, [ref]$errors) | Out-Null
+                  if ($errors.Count -gt 0) {
+                      Write-Error "Syntax error in $s : $($errors | Out-String)"
+                      exit 1
+                  }
+                  Write-Output "[PASS] Valid syntax: $s"
+              }
+          }
+
+      - name: Test Windows Install Execution
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\install.ps1
+
+      - name: Test Windows Uninstall Execution
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
+
+  test-linux:
+    name: Linux Pipeline Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Validate Bash Script Syntax
+        run: |
+          bash -n install.sh
+          bash -n uninstall.sh
+          bash -n lib/discover.sh
+          bash -n lib/desktop_actions.sh
+          bash -n lib/macos_launcher.sh
+          echo "[PASS] All bash scripts passed syntax validation."
+
+      - name: Make Scripts Executable
+        run: |
+          chmod +x install.sh uninstall.sh lib/*.sh
+
+      - name: Test Linux Installation (Mock Mode)
+        run: |
+          ./install.sh --mock
+          # Verify desktop action injection
+          grep "SplitSpaceNewWindow" ~/.local/share/applications/antigravity.desktop
+          grep "SplitSpaceNewWindow" ~/.local/share/applications/chatgpt.desktop
+          grep "SplitSpaceNewWindow" ~/.local/share/applications/claude.desktop
+          echo "[PASS] Verified desktop action injection across all target applications."
+
+      - name: Test Linux Uninstallation (Symmetrical Cleanup)
+        run: |
+          ./uninstall.sh --mock
+          # Verify action removal
+          ! grep -q "SplitSpaceNewWindow" ~/.local/share/applications/antigravity.desktop || (echo "Failed to clean antigravity action" && exit 1)
+          # Verify data directory removal
+          [ ! -d "$HOME/.local/share/splitspace" ] || (echo "Failed to clean splitspace data directory" && exit 1)
+          echo "[PASS] Verified symmetrical uninstallation and clean teardown on Linux."
+
+  test-macos:
+    name: macOS Pipeline Test
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Validate Bash Script Syntax
+        run: |
+          bash -n install.sh
+          bash -n uninstall.sh
+          bash -n lib/discover.sh
+          bash -n lib/desktop_actions.sh
+          bash -n lib/macos_launcher.sh
+          echo "[PASS] All bash scripts passed syntax validation on macOS."
+
+      - name: Make Scripts Executable
+        run: |
+          chmod +x install.sh uninstall.sh lib/*.sh
+
+      - name: Test macOS Installation (Mock Mode)
+        run: |
+          ./install.sh --mock
+          # Verify generated macOS wrapper app bundles
+          test -d "$HOME/Applications/SplitSpace/+ Antigravity.app"
+          test -d "$HOME/Applications/SplitSpace/+ ChatGPT.app"
+          test -d "$HOME/Applications/SplitSpace/+ Claude.app"
+          # Verify CLI tools
+          test -x "$HOME/.local/bin/splitspace-antigravity"
+          test -x "$HOME/.local/bin/splitspace-chatgpt"
+          test -x "$HOME/.local/bin/splitspace-claude"
+          echo "[PASS] Verified macOS wrapper apps and CLI tools generated successfully."
+
+      - name: Test macOS Uninstallation (Symmetrical Cleanup)
+        run: |
+          ./uninstall.sh --mock
+          # Verify app wrapper cleanup
+          test ! -d "$HOME/Applications/SplitSpace"
+          test ! -f "$HOME/.local/bin/splitspace-antigravity"
+          test ! -d "$HOME/Library/Application Support/SplitSpace"
+          echo "[PASS] Verified symmetrical uninstallation and clean teardown on macOS."

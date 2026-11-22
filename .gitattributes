@@ -1,0 +1,4 @@
+# Ensure shell scripts and YAML workflows preserve LF line endings across all platforms
+*.sh text eol=lf
+*.yml text eol=lf
+*.ps1 text eol=crlf
