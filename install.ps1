@@ -60,8 +60,8 @@ if ($App -and $App -ne "auto" -and $App -ne "all") {
     }
 } else {
     Write-Host "[*] Scanning system for installed AI desktop applications..." -ForegroundColor Gray
-    $installed = Get-SplitSpaceTargetApp -AppName "auto"
-    if ($installed -and $installed.Count -gt 0) {
+    $installed = @(Get-SplitSpaceTargetApp -AppName "auto")
+    if ($installed.Count -gt 0) {
         $targetsToInstall = $installed
     } else {
         Write-Host ""

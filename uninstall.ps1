@@ -48,7 +48,7 @@ if ($App -and $App -ne "all" -and $App -ne "auto") {
         $targetsToUninstall += $resolved
     }
 } else {
-    $targetsToUninstall = Get-SplitSpaceTargetApp -AppName "auto"
+    $targetsToUninstall = @(Get-SplitSpaceTargetApp -AppName "auto")
 }
 
 if ($targetsToUninstall.Count -gt 0) {
