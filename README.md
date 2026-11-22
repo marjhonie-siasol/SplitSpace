@@ -9,19 +9,20 @@
   <img src="https://img.shields.io/badge/Type-Zero--Binary%20Utility-success" alt="Type: Utility">
 </p>
 
-# SplitSpace
-
-SplitSpace enables multi-window multitasking for AI desktop applications on Windows. It injects native Jump List tasks directly into your Windows Taskbar, allowing you to open independent floating windows with a single right-click while keeping them neatly grouped under their official taskbar icons.
+<p align="center">
+  Native multi-window multitasking for AI desktop applications on Windows.<br>
+  Open independent, authenticated floating windows directly from your taskbar Jump List.
+</p>
 
 ---
 
 ## Visual Showcase
 
-SplitSpace adds a `+ <AppName>` task to your right-click taskbar menu. Every click opens an independent, fully authenticated floating window for parallel projects and prompts.
+Right-click any pinned AI desktop icon on your taskbar and select `+ <AppName>` to launch a new, isolated floating window.
 
 ### 1. Google Antigravity
 
-| Default Taskbar Menu (Before) | SplitSpace Jump List Integration (After) |
+| Default Taskbar Menu (Before) | Jump List Integration (After) |
 | :---: | :---: |
 | <img src="assets/antigravitybeforeinstall.png" width="360" alt="Antigravity Before Installation"> | <img src="assets/antigravityafterinstall.png" width="360" alt="Antigravity After Installation"> |
 
@@ -35,7 +36,7 @@ SplitSpace adds a `+ <AppName>` task to your right-click taskbar menu. Every cli
 
 ### 2. OpenAI ChatGPT Desktop
 
-| Default Taskbar Menu (Before) | SplitSpace Jump List Integration (After) |
+| Default Taskbar Menu (Before) | Jump List Integration (After) |
 | :---: | :---: |
 | <img src="assets/chatgptbeforeinstall.png" width="360" alt="ChatGPT Before Installation"> | <img src="assets/chatgptafterinstall.png" width="360" alt="ChatGPT After Installation"> |
 
@@ -49,7 +50,7 @@ SplitSpace adds a `+ <AppName>` task to your right-click taskbar menu. Every cli
 
 ### 3. Anthropic Claude Desktop
 
-| Default Taskbar Menu (Before) | SplitSpace Jump List Integration (After) |
+| Default Taskbar Menu (Before) | Jump List Integration (After) |
 | :---: | :---: |
 | <img src="assets/claudecodebeforeinstall.png" width="360" alt="Claude Before Installation"> | <img src="assets/claudecodeafterinstall.png" width="360" alt="Claude After Installation"> |
 
@@ -63,7 +64,7 @@ SplitSpace adds a `+ <AppName>` task to your right-click taskbar menu. Every cli
 
 ## Supported Applications
 
-| Application | Single-Window Limitation | With SplitSpace |
+| Application | Default Behavior | Multi-Window Support |
 | :--- | :--- | :--- |
 | **Google Antigravity** | Suppresses secondary launches; refocuses current window | Unlimited floating workspace windows grouped under the white taskbar icon |
 | **OpenAI ChatGPT Desktop** | Locked to a single window; forces in-app conversation switching | Concurrent parallel prompt sessions with official vector emblem |
