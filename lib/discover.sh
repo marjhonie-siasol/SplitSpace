@@ -2,6 +2,11 @@
 # SplitSpace - Cross-Platform Application Discovery Engine (Linux & macOS)
 # Zero telemetry, zero administrative elevation required.
 
+# Portable lowercase conversion (Compatible with macOS Bash 3.2 and modern Bash)
+to_lower() {
+    echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
 # Resolve operating system
 resolve_os() {
     local os_name

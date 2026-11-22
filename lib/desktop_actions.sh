@@ -47,7 +47,9 @@ install_linux_action() {
     fi
 
     # Profile isolation directory for secondary instances
-    local profile_dir="$SPLITSPACE_DATA_DIR/${app_name,,}/slot_1"
+    local app_key
+    app_key="$(to_lower "$app_name")"
+    local profile_dir="$SPLITSPACE_DATA_DIR/$app_key/slot_1"
     mkdir -p "$profile_dir"
 
     # Remove existing SplitSpace action if re-installing

@@ -33,6 +33,17 @@ jobs:
               }
           }
 
+      - name: Setup Mock Application for CI
+        shell: powershell
+        run: |
+          $startMenu = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+          if (-not (Test-Path $startMenu)) { New-Item -ItemType Directory -Path $startMenu -Force | Out-Null }
+          $ws = New-Object -ComObject WScript.Shell
+          $sc = $ws.CreateShortcut("$startMenu\Antigravity.lnk")
+          $sc.TargetPath = "$env:WINDIR\notepad.exe"
+          $sc.Save()
+          Write-Output "[SETUP] Created mock Antigravity shortcut in Start Menu."
+
       - name: Test Windows Install Execution
         shell: powershell
         run: |
@@ -42,6 +53,13 @@ jobs:
         shell: powershell
         run: |
           powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
+
+      - name: Clean Mock Application
+        shell: powershell
+        run: |
+          $mockLnk = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Antigravity.lnk"
+          if (Test-Path $mockLnk) { Remove-Item -Path $mockLnk -Force }
+          Write-Output "[CLEANUP] Removed mock Antigravity shortcut."
 
   test-linux:
     name: Linux Pipeline Test

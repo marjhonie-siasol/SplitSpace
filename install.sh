@@ -107,7 +107,7 @@ for entry in "${SUPPORTED_APPS[@]}"; do
     IFS=":" read -r app_name proc_name linux_file macos_file <<< "$entry"
 
     # Filter by specific app if requested
-    if [ -n "$TARGET_APP" ] && [ "${TARGET_APP,,}" != "${app_name,,}" ]; then
+    if [ -n "$TARGET_APP" ] && [ "$(to_lower "$TARGET_APP")" != "$(to_lower "$app_name")" ]; then
         continue
     fi
 

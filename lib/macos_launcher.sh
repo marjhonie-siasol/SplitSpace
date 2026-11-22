@@ -28,7 +28,9 @@ install_macos_launcher() {
     app_clean_name="$(basename "$app_bundle_path" .app)"
 
     # 1. Generate CLI script in ~/.local/bin
-    local cli_script="$SPLITSPACE_BIN_DIR/splitspace-${app_name,,}"
+    local app_key
+    app_key="$(to_lower "$app_name")"
+    local cli_script="$SPLITSPACE_BIN_DIR/splitspace-$app_key"
     cat <<EOF > "$cli_script"
 #!/usr/bin/env bash
 # SplitSpace secondary window launcher for $app_name
@@ -80,8 +82,10 @@ EOF
 remove_macos_launcher() {
     local app_name="$1"
 
+    local app_key
+    app_key="$(to_lower "$app_name")"
     local wrapper_app_dir="$SPLITSPACE_APPS_DIR/+ $app_name.app"
-    local cli_script="$SPLITSPACE_BIN_DIR/splitspace-${app_name,,}"
+    local cli_script="$SPLITSPACE_BIN_DIR/splitspace-$app_key"
 
     if [ -d "$wrapper_app_dir" ]; then
         rm -rf "$wrapper_app_dir"
